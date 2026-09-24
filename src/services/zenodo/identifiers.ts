@@ -61,11 +61,9 @@ function isWrapped(s: string): boolean {
 function stripWrapping(raw: string): string {
   let s = raw.trim();
   for (;;) {
-    const before = s;
     const unpunctuated = s.replace(TRAILING_PUNCTUATION, '').trimEnd();
-    if (unpunctuated !== s && isWrapped(unpunctuated)) s = unpunctuated;
-    if (isWrapped(s)) s = s.slice(1, -1).trim();
-    if (s === before) return s;
+    if (!isWrapped(unpunctuated)) return s;
+    s = unpunctuated.slice(1, -1).trim();
   }
 }
 
@@ -238,9 +236,12 @@ export function normalizeOrcid(raw: string): string {
     .replace(/x$/, 'X');
 }
 
-/** True when `orcid` has the `0000-0000-0000-000X` shape and a valid ISO 7064 mod 11-2 check digit. */
+/** The `0000-0000-0000-000X` shape of an ORCID iD. */
+export const ORCID_PATTERN = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
+
+/** True when `orcid` has the {@link ORCID_PATTERN} shape and a valid ISO 7064 mod 11-2 check digit. */
 export function isValidOrcid(orcid: string): boolean {
-  if (!/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/.test(orcid)) return false;
+  if (!ORCID_PATTERN.test(orcid)) return false;
   const digits = orcid.replaceAll('-', '');
   let total = 0;
   for (const ch of digits.slice(0, 15)) total = (total + Number(ch)) * 2;

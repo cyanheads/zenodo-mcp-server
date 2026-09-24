@@ -225,9 +225,7 @@ export const listFiles = tool('zenodo_list_files', {
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, {
-        ...ctx.recoveryFor('invalid_identifier'),
-      });
+      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
     }
     const service = getZenodoService();
 
@@ -238,7 +236,7 @@ export const listFiles = tool('zenodo_list_files', {
         throw ctx.fail(
           'record_not_found',
           `DOI ${ref.strippedDoi ?? ref.doi} is not registered to a Zenodo record.`,
-          { ...ctx.recoveryFor('record_not_found') },
+          ctx.recoveryFor('record_not_found'),
         );
       }
       record = resolution.record;
@@ -248,7 +246,7 @@ export const listFiles = tool('zenodo_list_files', {
         throw ctx.fail(
           'record_deleted',
           `Record ${ref.recid} was deleted from Zenodo; only its tombstone remains.`,
-          { ...ctx.recoveryFor('record_deleted') },
+          ctx.recoveryFor('record_deleted'),
         );
       }
       if (lookup.status !== 'found') {
@@ -257,7 +255,7 @@ export const listFiles = tool('zenodo_list_files', {
           lookup.status === 'restricted'
             ? `Record ${ref.recid} exists but its metadata is restricted and cannot be read anonymously.`
             : `No Zenodo record has id ${ref.recid}.`,
-          { ...ctx.recoveryFor('record_not_found') },
+          ctx.recoveryFor('record_not_found'),
         );
       }
       record = lookup.record;
@@ -357,14 +355,14 @@ export const listFiles = tool('zenodo_list_files', {
         files.enabled
           ? `Record ${record.recid} has no file with key "${inline(archiveKey)}".`
           : `Record ${record.recid} is a metadata-only deposit with no files.`,
-        { ...ctx.recoveryFor('file_not_found') },
+        ctx.recoveryFor('file_not_found'),
       );
     }
     if (!isZip(entry.key, entry.mimetype)) {
       throw ctx.fail(
         'not_an_archive',
         `"${inline(archiveKey)}" is not a .zip file${entry.mimetype ? ` (${entry.mimetype})` : ''}; only ZIP archives can be listed.`,
-        { ...ctx.recoveryFor('not_an_archive') },
+        ctx.recoveryFor('not_an_archive'),
       );
     }
     const container = await service.getContainer(record.recid, entry.key, ctx);
@@ -372,7 +370,7 @@ export const listFiles = tool('zenodo_list_files', {
       throw ctx.fail(
         'file_not_found',
         `Zenodo has no member listing for "${inline(archiveKey)}" in record ${record.recid}.`,
-        { ...ctx.recoveryFor('file_not_found') },
+        ctx.recoveryFor('file_not_found'),
       );
     }
     const { listing } = container;

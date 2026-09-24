@@ -9,9 +9,10 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { parseRecordRef, recordUrl } from '@/services/zenodo/identifiers.js';
-import type { Person, Tombstone, ZenodoRecord } from '@/services/zenodo/types.js';
+import type { ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
-import { inline, quoteBlock } from '../render.js';
+import { notOnZenodoMiss, recordMiss, TombstoneSchema } from '../record-miss.js';
+import { hasLineBreak, inline, quoteBlock } from '../render.js';
 import { enumPreprocess } from '../schema-helpers.js';
 
 const CITATION_STYLES = [
@@ -51,20 +52,6 @@ const PersonSchema = z
       .describe('Affiliations as deposited.'),
   })
   .describe('A creator or contributor.');
-
-const TombstoneSchema = z
-  .object({
-    removal_date: z.string().optional().describe('When the record was removed (ISO 8601).'),
-    removal_reason: z.string().optional().describe('Removal reason id, e.g. spam or retracted.'),
-    note: z.string().optional().describe('Removal note, when non-empty.'),
-    citation_text: z
-      .string()
-      .optional()
-      .describe(
-        'The citation the tombstone still serves — the only bibliographic data a deleted record keeps.',
-      ),
-  })
-  .describe('Removal tombstone of a deleted record.');
 
 const UsageSchema = z
   .object({
@@ -291,10 +278,6 @@ const RecordSchema = z
 
 type RecordView = z.infer<typeof RecordSchema>;
 
-function capPeople(people: Person[]): Person[] {
-  return people.slice(0, PEOPLE_CAP);
-}
-
 /** Applies get_record's display caps to a normalized record. */
 function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): RecordView {
   const description = record.description;
@@ -324,9 +307,9 @@ function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): Re
         ...(d.type ? { type: d.type } : {}),
         text: d.text.slice(0, ADDITIONAL_DESCRIPTION_TEXT_CAP),
       })),
-    creators: capPeople(record.creators),
+    creators: record.creators.slice(0, PEOPLE_CAP),
     creator_count: record.creators.length,
-    contributors: capPeople(record.contributors),
+    contributors: record.contributors.slice(0, PEOPLE_CAP),
     contributor_count: record.contributors.length,
     keywords: record.keywords.slice(0, LIST_CAP),
     rights: record.rights,
@@ -350,11 +333,6 @@ function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): Re
   };
 }
 
-function deletedGuidance(recid: string, tombstone: Tombstone): string {
-  const date = tombstone.removal_date?.slice(0, 10) ?? 'an unrecorded date';
-  return `Record ${recid} was removed from Zenodo on ${date} (reason: ${tombstone.removal_reason ?? 'not given'}); only its tombstone citation remains. Find a replacement or another version by title with zenodo_search_records.`;
-}
-
 function renderPerson(p: z.infer<typeof PersonSchema>): string {
   const parts = [inline(p.name)];
   if (p.type) parts.push(`[${p.type}]`);
@@ -370,8 +348,6 @@ function renderPerson(p: z.infer<typeof PersonSchema>): string {
   if (affiliations.length) parts.push(`— ${affiliations.join('; ')}`);
   return `- ${parts.join(' ')}`;
 }
-
-const hasLineBreak = (s: string) => /[\r\n\u0085\u2028\u2029]/.test(s);
 
 export const getRecord = tool('zenodo_get_record', {
   title: 'Get a Zenodo record',
@@ -462,9 +438,7 @@ export const getRecord = tool('zenodo_get_record', {
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, {
-        ...ctx.recoveryFor('invalid_identifier'),
-      });
+      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
     }
     const service = getZenodoService();
     const inputKind = ref.inputKind;
@@ -474,42 +448,18 @@ export const getRecord = tool('zenodo_get_record', {
     if (ref.kind === 'external_doi') {
       const resolution = await service.resolveDoi(ref.doi, ref.strippedDoi, ctx);
       if (resolution.status === 'not_on_zenodo') {
-        const doi = ref.strippedDoi ?? ref.doi;
         return {
           found: false,
           input_kind: inputKind,
-          miss_kind: 'not_on_zenodo' as const,
-          guidance: `DOI ${doi} is not registered to a Zenodo record. It resolves elsewhere at https://doi.org/${doi}; to find a related deposit, search by title with zenodo_search_records.`,
+          ...notOnZenodoMiss(ref.strippedDoi ?? ref.doi),
         };
       }
       record = resolution.record;
       resolvedFrom = 'external_doi';
     } else {
       const lookup = await service.getRecord(ref.recid, ctx);
-      if (lookup.status === 'not_found') {
-        return {
-          found: false,
-          input_kind: inputKind,
-          miss_kind: 'not_found' as const,
-          guidance: `No Zenodo record has id ${ref.recid}; it may never have existed. Search by title with zenodo_search_records, or by query doi:"10.5281/zenodo.${ref.recid}" with all_versions true.`,
-        };
-      }
-      if (lookup.status === 'deleted') {
-        return {
-          found: false,
-          input_kind: inputKind,
-          miss_kind: 'deleted' as const,
-          guidance: deletedGuidance(ref.recid, lookup.tombstone),
-          tombstone: lookup.tombstone,
-        };
-      }
-      if (lookup.status === 'restricted') {
-        return {
-          found: false,
-          input_kind: inputKind,
-          miss_kind: 'restricted' as const,
-          guidance: `Record ${ref.recid} exists but its metadata is restricted to authorized users and cannot be read anonymously.`,
-        };
+      if (lookup.status !== 'found') {
+        return { found: false, input_kind: inputKind, ...recordMiss(ref.recid, lookup) };
       }
       record = lookup.record;
       resolvedFrom = record.concept_recid === ref.recid ? 'concept_to_latest' : 'version';

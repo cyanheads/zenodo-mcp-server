@@ -12,6 +12,7 @@ import {
   isValidOrcid,
   isWholeIdentifier,
   normalizeOrcid,
+  ORCID_PATTERN,
   parseAwardRef,
   parseCommunityRef,
   parseFunderRef,
@@ -31,13 +32,6 @@ import { blankToUndefined, enumPreprocess, toOptionalArray } from '../schema-hel
 
 const RESULT_WINDOW = 10_000;
 const PARTIAL_DATE_PATTERN = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/;
-const ORCID_PATTERN = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
-
-/** A lone string or array of strings, blanks dropped, each value lowercased. */
-const toLowerArray = (v: unknown): unknown => {
-  const arr = toOptionalArray(v);
-  return Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x.toLowerCase() : x)) : arr;
-};
 
 /**
  * Resource type preprocess: a lone string or array, each value resolved to its id
@@ -63,11 +57,11 @@ const resourceTypeInput = z.preprocess((v, ctx) => {
   return arr.map((x) => (typeof x === 'string' ? (resolveResourceTypeId(x) ?? x) : x));
 }, z.array(z.enum(RESOURCE_TYPE_IDS)).max(10).optional());
 
-/** As {@link toLowerArray}, with a leading `.` stripped from each value (`.CSV` → `csv`). */
+/** A lone string or array of strings, blanks dropped, each value lowercased with a leading `.` stripped (`.CSV` → `csv`). */
 const toFileTypes = (v: unknown): unknown => {
-  const arr = toLowerArray(v);
+  const arr = toOptionalArray(v);
   return Array.isArray(arr)
-    ? arr.map((x) => (typeof x === 'string' ? x.replace(/^\./, '') : x))
+    ? arr.map((x) => (typeof x === 'string' ? x.toLowerCase().replace(/^\./, '') : x))
     : arr;
 };
 
@@ -442,21 +436,21 @@ export const searchRecords = tool('zenodo_search_records', {
       throw ctx.fail(
         'result_window_exceeded',
         `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} matches.`,
-        { ...ctx.recoveryFor('result_window_exceeded') },
+        ctx.recoveryFor('result_window_exceeded'),
       );
     }
     if (input.query && isWholeIdentifier(input.query)) {
       throw ctx.fail(
         'query_is_identifier',
         `The query "${inline(input.query)}" is a record identifier, not search terms.`,
-        { ...ctx.recoveryFor('query_is_identifier') },
+        ctx.recoveryFor('query_is_identifier'),
       );
     }
     if (input.query && hasUnpairedSlash(input.query)) {
       throw ctx.fail(
         'query_syntax',
         'The query has an unpaired / outside quotes, which Zenodo parses as an unterminated regular expression.',
-        { ...ctx.recoveryFor('query_syntax') },
+        ctx.recoveryFor('query_syntax'),
       );
     }
 
@@ -470,7 +464,7 @@ export const searchRecords = tool('zenodo_search_records', {
       throw ctx.fail(
         'invalid_date_range',
         `published_from ${publishedFrom} is after published_to ${publishedTo}.`,
-        { ...ctx.recoveryFor('invalid_date_range') },
+        ctx.recoveryFor('invalid_date_range'),
       );
     }
 
@@ -484,7 +478,7 @@ export const searchRecords = tool('zenodo_search_records', {
         throw ctx.fail(
           'unknown_community',
           `No Zenodo community matches "${inline(input.community)}" as a slug, UUID, or community URL.`,
-          { ...ctx.recoveryFor('unknown_community') },
+          ctx.recoveryFor('unknown_community'),
         );
       }
       communityId = community.uuid;
@@ -498,7 +492,7 @@ export const searchRecords = tool('zenodo_search_records', {
         throw ctx.fail(
           'unknown_funder',
           `"${inline(input.funder)}" is not a known ROR id and no funder carries that Crossref Funder DOI.`,
-          { ...ctx.recoveryFor('unknown_funder') },
+          ctx.recoveryFor('unknown_funder'),
         );
       }
       funderRor = funder.ror_id;

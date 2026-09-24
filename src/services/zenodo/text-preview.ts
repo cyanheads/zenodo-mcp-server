@@ -80,7 +80,7 @@ const SNIFF_BYTES = 4096;
 export function looksLikeText(bytes: Uint8Array, atStart: boolean): boolean {
   let start = 0;
   if (!atStart) while (start < 3 && ((bytes[start] ?? 0) & 0xc0) === 0x80) start++;
-  const head = bytes.subarray(start, Math.min(bytes.length, SNIFF_BYTES));
+  const head = bytes.subarray(start, SNIFF_BYTES);
   try {
     new TextDecoder('utf-8', { fatal: true }).decode(
       head.subarray(0, lastCompleteUtf8Boundary(head)),

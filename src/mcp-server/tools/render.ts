@@ -7,6 +7,7 @@
  */
 
 const INLINE_BREAKS = /[\r\n\u0085\u2028\u2029]+/g;
+const LINE_BREAK = /[\r\n\u0085\u2028\u2029]/;
 const LINE_SPLIT = /\r\n|[\r\n\u0085\u2028\u2029]/;
 
 /**
@@ -15,6 +16,11 @@ const LINE_SPLIT = /\r\n|[\r\n\u0085\u2028\u2029]/;
  */
 export function inline(s: string): string {
   return s.replace(INLINE_BREAKS, ' ');
+}
+
+/** True when `s` holds a line break {@link inline} would flatten \u2014 the cue to render it with {@link quoteBlock}. */
+export function hasLineBreak(s: string): boolean {
+  return LINE_BREAK.test(s);
 }
 
 /**

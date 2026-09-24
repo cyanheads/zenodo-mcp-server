@@ -82,6 +82,11 @@ function looksLikeHtml(text: string): boolean {
   return /^\s*<(?:!doctype\s+html|html[\s>]|head[\s>]|body[\s>])/i.test(text);
 }
 
+/** Cancels a response body that will not be read, releasing the connection. */
+export async function discardBody(res: Response): Promise<void> {
+  await res.body?.cancel().catch(() => undefined);
+}
+
 /** Reads a JSON body. An HTML page or unparseable body on a 2xx is a transient upstream fault. */
 export async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -331,15 +336,11 @@ export class ZenodoHttp {
   ): Promise<McpError> {
     const status = res.status;
     if (status === 429) {
+      const reset = headerNumber(res.headers, 'x-ratelimit-reset');
       const retryAfter =
         headerNumber(res.headers, 'retry-after') ??
-        (() => {
-          const reset = headerNumber(res.headers, 'x-ratelimit-reset');
-          return reset === undefined
-            ? undefined
-            : Math.max(1, Math.ceil(reset - Date.now() / 1000));
-        })();
-      await res.body?.cancel().catch(() => undefined);
+        (reset === undefined ? undefined : Math.max(1, Math.ceil(reset - Date.now() / 1000)));
+      await discardBody(res);
       return rateLimited('Zenodo answered HTTP 429 (rate limit reached).', {
         reason: 'rate_limited',
         status,
@@ -349,7 +350,7 @@ export class ZenodoHttp {
     }
 
     if (status >= 500) {
-      await res.body?.cancel().catch(() => undefined);
+      await discardBody(res);
       if (status === 504 && elapsedMs >= SLOW_GATEWAY_MS) return this.#timeoutError(req, ctx);
       if (status === 500) return this.#serverError(req, ctx);
       return serviceUnavailable(`Zenodo answered HTTP ${status} (${req.operation}).`, { status });

@@ -6,6 +6,7 @@
  * @module services/zenodo/query-builder
  */
 
+import type { AwardRef } from './identifiers.js';
 import { getResourceType } from './resource-types.js';
 
 /** Sort options Zenodo's record search accepts. */
@@ -28,8 +29,7 @@ export type AccessStatus = (typeof ACCESS_STATUSES)[number];
 export interface SearchFilters {
   accessStatus?: AccessStatus;
   allVersions: boolean;
-  /** Award clause from `parseAwardRef`. */
-  award?: { field: 'id' | 'number'; value: string };
+  award?: AwardRef;
   /** Canonical community UUID. */
   communityId?: string;
   creatorOrcid?: string;
@@ -112,13 +112,8 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
   }
 
   const query = filters.query?.trim();
-  const q = query
-    ? clauses.length > 0
-      ? [`(${query})`, ...clauses].join(' AND ')
-      : query
-    : clauses.length > 0
-      ? clauses.join(' AND ')
-      : undefined;
+  if (query) clauses.unshift(clauses.length > 0 ? `(${query})` : query);
+  const q = clauses.length > 0 ? clauses.join(' AND ') : undefined;
 
   const params: [string, string][] = [];
   if (q) params.push(['q', q]);

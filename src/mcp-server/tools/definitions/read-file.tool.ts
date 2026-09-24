@@ -230,9 +230,7 @@ export const readFile = tool('zenodo_read_file', {
   async handler(input, ctx) {
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, {
-        ...ctx.recoveryFor('invalid_identifier'),
-      });
+      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
     }
     const service = getZenodoService();
 
@@ -243,7 +241,7 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'record_not_found',
           `DOI ${ref.strippedDoi ?? ref.doi} is not registered to a Zenodo record.`,
-          { ...ctx.recoveryFor('record_not_found') },
+          ctx.recoveryFor('record_not_found'),
         );
       }
       record = resolution.record;
@@ -253,7 +251,7 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'record_deleted',
           `Record ${ref.recid} was deleted from Zenodo; only its tombstone remains.`,
-          { ...ctx.recoveryFor('record_deleted') },
+          ctx.recoveryFor('record_deleted'),
         );
       }
       if (lookup.status !== 'found') {
@@ -262,7 +260,7 @@ export const readFile = tool('zenodo_read_file', {
           lookup.status === 'restricted'
             ? `Record ${ref.recid} exists but its metadata is restricted and cannot be read anonymously.`
             : `No Zenodo record has id ${ref.recid}.`,
-          { ...ctx.recoveryFor('record_not_found') },
+          ctx.recoveryFor('record_not_found'),
         );
       }
       record = lookup.record;
@@ -288,19 +286,20 @@ export const readFile = tool('zenodo_read_file', {
       download_url: entry?.download_url ?? downloadUrl(recid, input.key),
       ...(access.files ? { files_access: access.files } : {}),
     };
+    const described = (status: Status, meta: { mimetype?: string; size?: number }) => ({
+      ...base,
+      status,
+      ...(meta.mimetype ? { mimetype: meta.mimetype } : {}),
+      ...(meta.size !== undefined ? { file_size: meta.size } : {}),
+      ...(entry?.md5 && !member ? { md5: entry.md5 } : {}),
+    });
     const withoutText = (
       status: Status,
       notice: string,
       meta: { mimetype?: string; size?: number },
     ) => {
       ctx.enrich.notice(notice);
-      return {
-        ...base,
-        status,
-        ...(meta.mimetype ? { mimetype: meta.mimetype } : {}),
-        ...(meta.size !== undefined ? { file_size: meta.size } : {}),
-        ...(entry?.md5 && !member ? { md5: entry.md5 } : {}),
-      };
+      return described(status, meta);
     };
 
     if (files.enabled && access.files === 'restricted') {
@@ -312,7 +311,7 @@ export const readFile = tool('zenodo_read_file', {
         files.enabled
           ? `Record ${recid} has no file with key "${inline(input.key)}".`
           : `Record ${recid} is a metadata-only deposit with no files.`,
-        { ...ctx.recoveryFor('file_not_found') },
+        ctx.recoveryFor('file_not_found'),
       );
     }
 
@@ -330,14 +329,14 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'not_an_archive',
           `"${inline(input.key)}" is not a .zip file, so archive_member cannot be read from it.`,
-          { ...ctx.recoveryFor('not_an_archive') },
+          ctx.recoveryFor('not_an_archive'),
         );
       }
       if (input.offset_bytes > 0) {
         throw ctx.fail(
           'member_offset_unsupported',
           'Zenodo serves ZIP members only from their first byte; offset_bytes must be 0 with archive_member.',
-          { ...ctx.recoveryFor('member_offset_unsupported') },
+          ctx.recoveryFor('member_offset_unsupported'),
         );
       }
       const container = await service.getContainer(recid, entry.key, ctx);
@@ -357,7 +356,7 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'member_not_found',
           `The .zip "${inline(input.key)}" in record ${recid} has no member "${displayName}".`,
-          { ...ctx.recoveryFor('member_not_found') },
+          ctx.recoveryFor('member_not_found'),
         );
       }
     } else {
@@ -369,7 +368,7 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'offset_out_of_range',
           `offset_bytes ${input.offset_bytes} is at or past the end of ${displayName} (${meta.size} bytes).`,
-          { ...ctx.recoveryFor('offset_out_of_range') },
+          ctx.recoveryFor('offset_out_of_range'),
         );
       }
       if (meta.size === 0) {
@@ -377,7 +376,7 @@ export const readFile = tool('zenodo_read_file', {
           throw ctx.fail(
             'offset_out_of_range',
             `${displayName} is empty, so offset_bytes ${input.offset_bytes} is past its end.`,
-            { ...ctx.recoveryFor('offset_out_of_range') },
+            ctx.recoveryFor('offset_out_of_range'),
           );
         }
         return withoutText('empty', `${displayName} is empty.`, meta);
@@ -389,14 +388,14 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'offset_out_of_range',
           `offset_bytes ${input.offset_bytes} is past the end of ${displayName}.`,
-          { ...ctx.recoveryFor('offset_out_of_range') },
+          ctx.recoveryFor('offset_out_of_range'),
         );
       }
       if (read.status === 'not_found') {
         throw ctx.fail(
           'file_not_found',
           `Zenodo has no content for "${displayName}" in record ${recid}.`,
-          { ...ctx.recoveryFor('file_not_found') },
+          ctx.recoveryFor('file_not_found'),
         );
       }
       if (meta.size === undefined && read.fileSize !== undefined) meta.size = read.fileSize;
@@ -416,7 +415,7 @@ export const readFile = tool('zenodo_read_file', {
         throw ctx.fail(
           'offset_out_of_range',
           `offset_bytes ${input.offset_bytes} is past the end of ${displayName}.`,
-          { ...ctx.recoveryFor('offset_out_of_range') },
+          ctx.recoveryFor('offset_out_of_range'),
         );
       }
       return withoutText('empty', `${displayName} is empty.`, meta);
@@ -453,11 +452,7 @@ export const readFile = tool('zenodo_read_file', {
     }
 
     return {
-      ...base,
-      status: 'text' as const,
-      ...(meta.mimetype ? { mimetype: meta.mimetype } : {}),
-      ...(meta.size !== undefined ? { file_size: meta.size } : {}),
-      ...(entry.md5 && !member ? { md5: entry.md5 } : {}),
+      ...described('text', meta),
       text: cut.text,
       bytes_returned: cut.bytesKept,
       has_more: hasMore,

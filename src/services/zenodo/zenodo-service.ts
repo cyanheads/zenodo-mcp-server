@@ -12,6 +12,7 @@ import { getServerConfig } from '@/config/server-config.js';
 import { TtlLruCache } from './cache.js';
 import {
   CONTENT_ATTEMPT_MS,
+  discardBody,
   JSON_ATTEMPT_MS,
   readCapped,
   readJson,
@@ -154,7 +155,7 @@ export class ZenodoService {
           );
           return { status: 'deleted', tombstone: normalizeTombstone(body.tombstone) };
         }
-        await res.body?.cancel().catch(() => undefined);
+        await discardBody(res);
         return { status: res.status === 403 ? 'restricted' : 'not_found' };
       },
       ctx,
@@ -224,7 +225,7 @@ export class ZenodoService {
         redirect: 'manual',
       },
       async (res) => {
-        await res.body?.cancel().catch(() => undefined);
+        await discardBody(res);
         if (res.status === 404) return;
         return /\/records\/(\d+)/.exec(res.headers.get('location') ?? '')?.[1];
       },
@@ -255,7 +256,7 @@ export class ZenodoService {
       ),
       async (res): Promise<VersionsLookup> => {
         if (res.status !== 200) {
-          await res.body?.cancel().catch(() => undefined);
+          await discardBody(res);
           return { status: 'not_found' };
         }
         const raw = await readJson<RawSearchResponse>(res);
@@ -317,7 +318,7 @@ export class ZenodoService {
       },
       async (res): Promise<ContainerLookup> => {
         if (res.status === 404) {
-          await res.body?.cancel().catch(() => undefined);
+          await discardBody(res);
           return { status: 'not_found' };
         }
         return { status: 'ok', listing: normalizeContainer(await readJson<RawContainer>(res)) };
@@ -426,7 +427,7 @@ export class ZenodoService {
         ),
         async (res) => {
           if (res.status === 404) {
-            await res.body?.cancel().catch(() => undefined);
+            await discardBody(res);
             return;
           }
           return normalizeFunder(await readJson<RawFunder>(res));
@@ -556,7 +557,7 @@ export class ZenodoService {
         ),
         async (res) => {
           if (res.status === 404) {
-            await res.body?.cancel().catch(() => undefined);
+            await discardBody(res);
             return;
           }
           return normalizeCommunity(await readJson<RawCommunity>(res));
@@ -587,7 +588,7 @@ async function contentMiss(res: Response): Promise<ContentRead | undefined> {
           ? 'range_not_satisfiable'
           : undefined;
   if (!status) return;
-  await res.body?.cancel().catch(() => undefined);
+  await discardBody(res);
   return { status, bytes: new Uint8Array(0), moreRemains: false };
 }
 

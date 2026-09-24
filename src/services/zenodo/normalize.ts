@@ -210,7 +210,7 @@ export function normalizeTombstone(raw: RawTombstone | undefined): Tombstone {
 }
 
 /** First `max` characters at a word boundary, with `…` when cut. */
-export function snippet(text: string, max: number): string {
+function snippet(text: string, max: number): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const space = cut.lastIndexOf(' ');

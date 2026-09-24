@@ -8,31 +8,13 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { parseRecordRef } from '@/services/zenodo/identifiers.js';
-import type { Tombstone, VersionsLookup } from '@/services/zenodo/types.js';
+import type { VersionsLookup } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import { notOnZenodoMiss, recordMiss, TombstoneSchema } from '../record-miss.js';
 import { inline, quoteBlock } from '../render.js';
 
 /** Zenodo answers HTTP 400 when page × size passes this window. */
 const RESULT_WINDOW = 10_000;
-
-const TombstoneSchema = z
-  .object({
-    removal_date: z.string().optional().describe('When the record was removed (ISO 8601).'),
-    removal_reason: z.string().optional().describe('Removal reason id, e.g. spam or retracted.'),
-    note: z.string().optional().describe('Removal note, when non-empty.'),
-    citation_text: z
-      .string()
-      .optional()
-      .describe(
-        'The citation the tombstone still serves — the only bibliographic data a deleted record keeps.',
-      ),
-  })
-  .describe('Removal tombstone of a deleted record.');
-
-function deletedGuidance(recid: string, tombstone: Tombstone): string {
-  const date = tombstone.removal_date?.slice(0, 10) ?? 'an unrecorded date';
-  return `Record ${recid} was removed from Zenodo on ${date} (reason: ${tombstone.removal_reason ?? 'not given'}); only its tombstone citation remains. Find a replacement or another version by title with zenodo_search_records.`;
-}
 
 export const listVersions = tool('zenodo_list_versions', {
   title: 'List Zenodo record versions',
@@ -200,15 +182,13 @@ export const listVersions = tool('zenodo_list_versions', {
       throw ctx.fail(
         'result_window_exceeded',
         `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} versions Zenodo pages through.`,
-        { ...ctx.recoveryFor('result_window_exceeded') },
+        ctx.recoveryFor('result_window_exceeded'),
       );
     }
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, {
-        ...ctx.recoveryFor('invalid_identifier'),
-      });
+      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
     }
     const service = getZenodoService();
     const inputKind = ref.inputKind;
@@ -218,11 +198,9 @@ export const listVersions = tool('zenodo_list_versions', {
     if (ref.kind === 'external_doi') {
       const resolution = await service.resolveDoi(ref.doi, ref.strippedDoi, ctx);
       if (resolution.status === 'not_on_zenodo') {
-        const doi = ref.strippedDoi ?? ref.doi;
         return {
           ...miss,
-          miss_kind: 'not_on_zenodo' as const,
-          guidance: `DOI ${doi} is not registered to a Zenodo record. It resolves elsewhere at https://doi.org/${doi}; to find a related deposit, search by title with zenodo_search_records.`,
+          ...notOnZenodoMiss(ref.strippedDoi ?? ref.doi),
           has_more: false,
           versions: [],
         };
@@ -236,33 +214,8 @@ export const listVersions = tool('zenodo_list_versions', {
     if (lookup.status === 'not_found' || lookup.total === 0) {
       // A concept id 404s on /versions and a deleted recid answers 200 with no hits; the record GET classifies every miss.
       const record = await service.getRecord(recid, ctx);
-      if (record.status === 'not_found') {
-        return {
-          ...miss,
-          miss_kind: 'not_found' as const,
-          guidance: `No Zenodo record has id ${recid}; it may never have existed. Search by title with zenodo_search_records, or by query doi:"10.5281/zenodo.${recid}" with all_versions true.`,
-          has_more: false,
-          versions: [],
-        };
-      }
-      if (record.status === 'deleted') {
-        return {
-          ...miss,
-          miss_kind: 'deleted' as const,
-          guidance: deletedGuidance(recid, record.tombstone),
-          tombstone: record.tombstone,
-          has_more: false,
-          versions: [],
-        };
-      }
-      if (record.status === 'restricted') {
-        return {
-          ...miss,
-          miss_kind: 'restricted' as const,
-          guidance: `Record ${recid} exists but its metadata is restricted to authorized users and cannot be read anonymously.`,
-          has_more: false,
-          versions: [],
-        };
+      if (record.status !== 'found') {
+        return { ...miss, ...recordMiss(recid, record), has_more: false, versions: [] };
       }
       if (record.record.recid !== recid) {
         recid = record.record.recid;
