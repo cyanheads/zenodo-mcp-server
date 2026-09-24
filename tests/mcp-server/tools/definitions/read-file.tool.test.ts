@@ -69,6 +69,10 @@ const BOM_CSV = concat(
   encode('id,value\r\n1,alpha\r\n2,beta\r\n'),
 );
 const BLOB = concat(encode('PK'), Uint8Array.of(0x03, 0x04, 0x00, 0x00), encode('rest'));
+const LICENSE_TEXT =
+  '                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n\n Copyright (C) 2007 Free Software Foundation, Inc. — “free as in freedom”\n';
+/** Latin-1 bytes with no NUL: not valid UTF-8 (0xE9 followed by ASCII). */
+const LATIN1 = concat(encode('Caf'), Uint8Array.of(0xe9), encode(' au lait\n'));
 /** 200 × "é" (2 bytes each) + LF: 401 bytes. */
 const UTF8 = encode(`${'\u00e9'.repeat(200)}\n`);
 
@@ -342,6 +346,71 @@ describe('zenodo_read_file — top-level text files', () => {
     });
   });
 
+  describe('extensionless application/octet-stream files are read and sniffed', () => {
+    const sniffRecord = () =>
+      withEntries(recordFixture(), [
+        {
+          key: 'LICENSE',
+          size: encode(LICENSE_TEXT).length,
+          mimetype: 'application/octet-stream',
+        },
+        { key: 'Makefile', size: 23 },
+        { key: 'firmware', size: BLOB.length, mimetype: 'application/octet-stream' },
+        { key: 'COPYING', size: LATIN1.length, mimetype: 'application/octet-stream' },
+        { key: 'data.dat', size: 100, mimetype: 'application/octet-stream' },
+      ]);
+
+    it('returns LICENSE as text', async () => {
+      serveRecord('22705923', sniffRecord);
+      serveRanged('/records/22705923/files/LICENSE', encode(LICENSE_TEXT));
+      const { result, enrichment } = await call({ id: '22705923', key: 'LICENSE' });
+      expect(result).toMatchObject({
+        status: 'text',
+        mimetype: 'application/octet-stream',
+        text: LICENSE_TEXT,
+        has_more: false,
+      });
+      expect(enrichment).toEqual({});
+      expect(contentCalls()).toHaveLength(1);
+    });
+
+    it('returns a Makefile with no MIME type as text', async () => {
+      serveRecord('22705923', sniffRecord);
+      serveRanged('/records/22705923/files/Makefile', encode('all:\n\tpython setup.py\n'));
+      const { result } = await call({ id: '22705923', key: 'Makefile' });
+      expect(result).toMatchObject({ status: 'text', text: 'all:\n\tpython setup.py\n' });
+    });
+
+    it('keeps rejecting binary content, on a NUL byte', async () => {
+      serveRecord('22705923', sniffRecord);
+      serveRanged('/records/22705923/files/firmware', BLOB);
+      const { result, enrichment } = await call({ id: '22705923', key: 'firmware' });
+      expect(result).toMatchObject({ status: 'not_text', bytes_returned: 0 });
+      expect(result).not.toHaveProperty('text');
+      expect(enrichment.notice).toBe(
+        'firmware is not a previewable text file (application/octet-stream); download it from download_url.',
+      );
+    });
+
+    it('keeps rejecting content that is not valid UTF-8', async () => {
+      serveRecord('22705923', sniffRecord);
+      serveRanged('/records/22705923/files/COPYING', LATIN1);
+      const { result, enrichment } = await call({ id: '22705923', key: 'COPYING' });
+      expect(result).toMatchObject({ status: 'not_text', bytes_returned: 0 });
+      expect(result).not.toHaveProperty('text');
+      expect(enrichment.notice).toBe(
+        'COPYING has no file extension and its content is not UTF-8 text (application/octet-stream); download it from download_url.',
+      );
+    });
+
+    it('refuses an octet-stream file with an unlisted extension unread', async () => {
+      serveRecord('22705923', sniffRecord);
+      const { result } = await call({ id: '22705923', key: 'data.dat' });
+      expect(result.status).toBe('not_text');
+      expect(contentCalls()).toHaveLength(0);
+    });
+  });
+
   it('drops a leading UTF-8 BOM from the text but counts its bytes', async () => {
     serveRecord('22705923', textRecord);
     serveRanged('/records/22705923/files/data/table.csv', BOM_CSV);
@@ -515,8 +584,90 @@ describe('zenodo_read_file — ZIP members', () => {
       files_access: 'public',
     });
     expect(enrichment.notice).toBe(
-      'Showing bytes 0–239 of 2000; the rest of this member is past the preview cap, so download the archive from download_url.',
+      'Showing bytes 0–239 of 2000; call zenodo_read_file again with max_bytes 2000 to read the whole member.',
     );
+  });
+
+  it('reads the whole member on the max_bytes the truncation notice names', async () => {
+    serveRecord('22705923', textRecord);
+    serveZip();
+    serveMember('scikit-learn-1.9.1/README.rst', () => bytesResponse(MEMBER_README));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/README.rst',
+      max_bytes: MEMBER_README.length,
+    });
+    expect(result).toMatchObject({ status: 'text', bytes_returned: 2000, has_more: false });
+    expect(enrichment).toEqual({});
+  });
+
+  it('suggests the largest read before a download when the member size is unknown', async () => {
+    serveRecord('22705923', textRecord);
+    serveZip();
+    serveMember('scikit-learn-1.9.1/CHANGES.md', () => bytesResponse(MEMBER_README));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/CHANGES.md',
+      max_bytes: 256,
+    });
+    expect(result).toMatchObject({ status: 'text', has_more: true });
+    expect(result).not.toHaveProperty('file_size');
+    expect(enrichment.notice).toBe(
+      'Showing bytes 0–239 of an unknown total; call zenodo_read_file again with max_bytes 65536 to read more of this member, and download the archive from download_url if that still stops short.',
+    );
+  });
+
+  it('keeps the download guidance for a member larger than the read cap', async () => {
+    const big = encode('Line of the changelog.\n'.repeat(3_000));
+    serveRecord('22705923', textRecord);
+    const listing = zipListing();
+    listing.entries.push({
+      key: 'scikit-learn-1.9.1/CHANGES.md',
+      size: big.length,
+      compressed_size: 900,
+      mimetype: 'text/markdown',
+    });
+    serveZip(listing);
+    serveMember('scikit-learn-1.9.1/CHANGES.md', () => bytesResponse(big));
+    const small = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/CHANGES.md',
+      max_bytes: 256,
+    });
+    expect(small.enrichment.notice).toBe(
+      `Showing bytes 0–252 of ${big.length}; the member is larger than the 65536-byte read cap, so download the archive from download_url for the rest (max_bytes 65536 shows more of its start).`,
+    );
+    const capped = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/CHANGES.md',
+      max_bytes: 65_536,
+    });
+    expect(capped.enrichment.notice).toMatch(
+      /the member is larger than the 65536-byte read cap, so download the archive from download_url for the rest\.$/,
+    );
+  });
+
+  it('reads an extensionless octet-stream member and returns it when it is UTF-8 text', async () => {
+    serveRecord('22705923', textRecord);
+    const listing = zipListing();
+    listing.entries.push({
+      key: 'scikit-learn-1.9.1/COPYING',
+      size: encode(LICENSE_TEXT).length,
+      compressed_size: 900,
+      mimetype: 'application/octet-stream',
+    });
+    serveZip(listing);
+    serveMember('scikit-learn-1.9.1/COPYING', () => bytesResponse(LICENSE_TEXT));
+    const { result } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/COPYING',
+    });
+    expect(result).toMatchObject({ status: 'text', text: LICENSE_TEXT });
   });
 
   it('reads a small member whole', async () => {

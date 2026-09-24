@@ -1,7 +1,7 @@
 /**
  * @fileoverview Text-preview rules for file reads: which files are previewable,
- * the fence language hint, and the byte cut that keeps continuation windows on
- * line or character boundaries.
+ * which are read and sniffed, the fence language hint, and the byte cut that keeps
+ * continuation windows on line or character boundaries.
  * @module services/zenodo/text-preview
  */
 
@@ -31,18 +31,64 @@ export function extensionOf(key: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
 }
 
+/** The mimetype without parameters, lowercased; `''` when absent. */
+function baseMime(mimetype: string | undefined): string {
+  return (mimetype ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+}
+
 /**
  * True when a file is worth previewing as text: a `text/*` mimetype, one of the
  * listed structured-text mimetypes, or a known text extension (CITATION.cff
  * arrives as `application/octet-stream`, so the extension list is needed).
  */
 export function isPreviewable(key: string, mimetype: string | undefined): boolean {
-  const mime = (mimetype ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  const mime = baseMime(mimetype);
   return (
     mime.startsWith('text/') ||
     PREVIEWABLE_MIMETYPES.has(mime) ||
     PREVIEWABLE_EXTENSIONS.has(extensionOf(key))
   );
+}
+
+/**
+ * How a read treats a file before fetching it. `text`: previewable by mimetype or
+ * extension. `sniff`: an extensionless file Zenodo types `application/octet-stream`
+ * (or not at all) — LICENSE, COPYING, Makefile, Dockerfile, README — whose content
+ * decides ({@link looksLikeText}). `binary`: anything else, refused unread.
+ */
+export type PreviewMode = 'text' | 'sniff' | 'binary';
+
+/** The {@link PreviewMode} of a file or ZIP member. */
+export function previewMode(key: string, mimetype: string | undefined): PreviewMode {
+  if (isPreviewable(key, mimetype)) return 'text';
+  const mime = baseMime(mimetype);
+  return extensionOf(key) === '' && (mime === '' || mime === 'application/octet-stream')
+    ? 'sniff'
+    : 'binary';
+}
+
+/** Bytes at the head of a window that {@link looksLikeText} checks. */
+const SNIFF_BYTES = 4096;
+
+/**
+ * True when the head of a read window is UTF-8 text: its first {@link SNIFF_BYTES}
+ * bytes decode without error. A sequence cut by either edge of the window is
+ * allowed — at a positive offset the window may start mid-character, and the head
+ * ends wherever the sniff length falls. NUL bytes are checked separately
+ * ({@link cutPreview}).
+ */
+export function looksLikeText(bytes: Uint8Array, atStart: boolean): boolean {
+  let start = 0;
+  if (!atStart) while (start < 3 && ((bytes[start] ?? 0) & 0xc0) === 0x80) start++;
+  const head = bytes.subarray(start, Math.min(bytes.length, SNIFF_BYTES));
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(
+      head.subarray(0, lastCompleteUtf8Boundary(head)),
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** True when the key names a ZIP archive by extension or mimetype. */

@@ -8,11 +8,18 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { parseRecordRef } from '@/services/zenodo/identifiers.js';
-import { isPreviewable, isZip } from '@/services/zenodo/text-preview.js';
+import { isZip, previewMode } from '@/services/zenodo/text-preview.js';
 import type { ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { inline } from '../render.js';
 import { blankToUndefined } from '../schema-helpers.js';
+
+/** True when zenodo_read_file reads the file rather than refusing it unread. */
+const readsAsText = (key: string, mimetype: string | undefined) =>
+  previewMode(key, mimetype) !== 'binary';
+
+const PREVIEWABLE_DESCRIPTION =
+  'True when zenodo_read_file reads this as text: a text MIME type or extension, or an extensionless application/octet-stream file (LICENSE, Makefile) whose content is checked on read and returned only if it is UTF-8 text.';
 
 /** A window of `items` plus the paging facts every arm reports. */
 function pageOf<T>(items: T[], offset: number, limit: number) {
@@ -91,9 +98,7 @@ export const listFiles = tool('zenodo_list_files', {
             mimetype: z.string().optional().describe('MIME type, when reported.'),
             md5: z.string().optional().describe('MD5 checksum (hex), when reported.'),
             download_url: z.string().describe('Direct download URL.'),
-            previewable: z
-              .boolean()
-              .describe('True when zenodo_read_file can show this file as text.'),
+            previewable: z.boolean().describe(PREVIEWABLE_DESCRIPTION),
             listable: z
               .boolean()
               .describe(
@@ -108,6 +113,9 @@ export const listFiles = tool('zenodo_list_files', {
       .object({
         key: z.string().describe('The .zip file key.'),
         size: z.number().optional().describe('Size of the .zip in bytes, when reported.'),
+        download_url: z
+          .string()
+          .describe('Direct download URL of the .zip — the complete member list needs the file.'),
         listed_members: z.number().describe('File members Zenodo listed for this archive.'),
         upstream_truncated: z
           .boolean()
@@ -133,9 +141,7 @@ export const listFiles = tool('zenodo_list_files', {
               .optional()
               .describe('Compressed size in bytes, when reported.'),
             mimetype: z.string().optional().describe('MIME type, when reported.'),
-            previewable: z
-              .boolean()
-              .describe('True when zenodo_read_file can show this member as text.'),
+            previewable: z.boolean().describe(PREVIEWABLE_DESCRIPTION),
           })
           .describe('One archive member.'),
       )
@@ -286,12 +292,19 @@ export const listFiles = tool('zenodo_list_files', {
     }
 
     const notice: string[] = [];
-    const finish = <T>(page: ReturnType<typeof pageOf<T>>, noun: 'files' | 'members') => {
+    const finish = <T>(
+      page: ReturnType<typeof pageOf<T>>,
+      noun: 'files' | 'members',
+      partialListing = false,
+    ) => {
       ctx.enrich({ shown: page.slice.length });
       ctx.enrich.total(page.matched);
       if (needle && page.matched === 0) {
+        const filter = inline(input.key_contains ?? '');
         notice.push(
-          `No ${noun} contain "${inline(input.key_contains ?? '')}"; call zenodo_list_files again without key_contains.`,
+          partialListing
+            ? `No listed members contain "${filter}", but the member may lie past the listing cap: if you know its full path, read it directly with zenodo_read_file (key ${inline(archiveKey ?? '')}, archive_member set to that path).`
+            : `No ${noun} contain "${filter}"; call zenodo_list_files again without key_contains.`,
         );
       } else if (page.matched > 0 && input.offset >= page.matched) {
         notice.push(
@@ -331,7 +344,7 @@ export const listFiles = tool('zenodo_list_files', {
         ...(files.total_bytes !== undefined ? { total_bytes: files.total_bytes } : {}),
         entries: page.slice.map((e) => ({
           ...e,
-          previewable: isPreviewable(e.key, e.mimetype),
+          previewable: readsAsText(e.key, e.mimetype),
           listable: isZip(e.key, e.mimetype),
         })),
       };
@@ -365,25 +378,26 @@ export const listFiles = tool('zenodo_list_files', {
     const { listing } = container;
     if (listing.upstream_truncated) {
       notice.push(
-        'Zenodo lists at most 1,000 entries of an archive, so some members are missing; download the archive from download_url for the complete list.',
+        'Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list.',
       );
     }
     const matching = needle
       ? listing.members.filter((m) => m.path.toLowerCase().includes(needle))
       : listing.members;
     const page = pageOf(matching, input.offset, input.limit);
-    const paging = finish(page, 'members');
+    const paging = finish(page, 'members', listing.upstream_truncated);
     return {
       ...common,
       ...paging,
       archive: {
         key: entry.key,
         ...(entry.size !== undefined ? { size: entry.size } : {}),
+        download_url: entry.download_url,
         listed_members: listing.members.length,
         upstream_truncated: listing.upstream_truncated,
         directory_count: listing.directory_count,
       },
-      members: page.slice.map((m) => ({ ...m, previewable: isPreviewable(m.path, m.mimetype) })),
+      members: page.slice.map((m) => ({ ...m, previewable: readsAsText(m.path, m.mimetype) })),
     };
   },
 
@@ -404,7 +418,7 @@ export const listFiles = tool('zenodo_list_files', {
     const a = result.archive;
     if (a) {
       lines.push(
-        `**Archive:** ${inline(a.key)} (${a.size ?? '?'} bytes) — ${a.listed_members} members and ${a.directory_count} directories listed; upstream truncated: ${a.upstream_truncated}`,
+        `**Archive:** ${inline(a.key)} (${a.size ?? '?'} bytes) — ${a.listed_members} members and ${a.directory_count} directories listed; upstream truncated: ${a.upstream_truncated} — ${a.download_url}`,
       );
     }
     for (const e of result.entries ?? []) {

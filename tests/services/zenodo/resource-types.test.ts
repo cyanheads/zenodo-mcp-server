@@ -1,7 +1,7 @@
 /**
  * @fileoverview Tests for the static resource-type table: its shape, the
- * `<type>::<id>` search value for subtypes, lookup by id, and the strict token
- * filter behind the resource_types vocabulary.
+ * `<type>::<id>` search value for subtypes, lookup by id, resolving an id as a
+ * caller writes it, and the strict token filter behind the resource_types vocabulary.
  * @module tests/services/zenodo/resource-types.test
  */
 
@@ -11,7 +11,31 @@ import {
   getResourceType,
   RESOURCE_TYPE_IDS,
   RESOURCE_TYPES,
+  resolveResourceTypeId,
 } from '@/services/zenodo/resource-types.js';
+
+describe('resolveResourceTypeId', () => {
+  it.each([
+    ['dataset', 'dataset'],
+    [' Dataset ', 'dataset'],
+    ['PUBLICATION-ARTICLE', 'publication-article'],
+    ['publication::publication-article', 'publication-article'],
+    ['Image::Image-Photo', 'image-photo'],
+  ])('%j → %s', (raw, id) => {
+    expect(resolveResourceTypeId(raw)).toBe(id);
+  });
+
+  it('resolves every search value the lookup prints back to its id', () => {
+    for (const t of RESOURCE_TYPES) expect(resolveResourceTypeId(t.searchValue)).toBe(t.id);
+  });
+
+  it.each(['datasets', 'image::publication-article', 'dataset::dataset', '::dataset', ''])(
+    '%j names no resource type',
+    (raw) => {
+      expect(resolveResourceTypeId(raw)).toBeUndefined();
+    },
+  );
+});
 
 describe('RESOURCE_TYPES', () => {
   it('holds the 43 unique ids of /api/vocabularies/resourcetypes', () => {

@@ -12,7 +12,7 @@ import { parseRecordRef, recordUrl } from '@/services/zenodo/identifiers.js';
 import type { Person, Tombstone, ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { inline, quoteBlock } from '../render.js';
-import { blankToUndefined } from '../schema-helpers.js';
+import { enumPreprocess } from '../schema-helpers.js';
 
 const CITATION_STYLES = [
   'bibtex',
@@ -388,9 +388,9 @@ export const getRecord = tool('zenodo_get_record', {
         'The deposit to resolve: a record id (22705923), a Zenodo DOI (10.5281/zenodo.22705923, doi: prefix and any case accepted), a concept DOI or concept record id such as 10.5281/zenodo.591564 (resolves to the latest version), another DOI registered to a Zenodo record, or a zenodo.org/records or doi.org URL.',
       ),
     citation_style: z
-      .preprocess(blankToUndefined, z.enum(CITATION_STYLES).optional())
+      .preprocess(enumPreprocess(CITATION_STYLES), z.enum(CITATION_STYLES).optional())
       .describe(
-        'Include a formatted citation of the resolved version: bibtex, csl-json, or a text style (apa, chicago-author-date, harvard-cite-them-right, ieee, modern-language-association, nature). Omit for none.',
+        'Include a formatted citation of the resolved version: bibtex, csl-json, or a text style (apa, chicago-author-date, harvard-cite-them-right, ieee, modern-language-association, nature). Case, spaces, hyphens, and underscores are ignored when matching (BibTeX, APA, CSL JSON). Omit for none.',
       ),
   }),
   output: z.object({

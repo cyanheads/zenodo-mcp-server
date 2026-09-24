@@ -2,7 +2,7 @@
  * @fileoverview zenodo_search_records — keyword search over Zenodo deposits with
  * verified filters (resource type, community, funder, award, creator ORCID, file
  * type, license, access status, publication date), returning manifest-free
- * summaries plus facet counts over the full match set.
+ * summaries plus facet counts over the full match set, every filter applied.
  * @module mcp-server/tools/definitions/search-records
  */
 
@@ -24,10 +24,10 @@ import {
   SEARCH_SORTS,
   type SearchFilters,
 } from '@/services/zenodo/query-builder.js';
-import { getResourceType, RESOURCE_TYPE_IDS } from '@/services/zenodo/resource-types.js';
+import { RESOURCE_TYPE_IDS, resolveResourceTypeId } from '@/services/zenodo/resource-types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { inline } from '../render.js';
-import { blankToUndefined, toOptionalArray } from '../schema-helpers.js';
+import { blankToUndefined, enumPreprocess, toOptionalArray } from '../schema-helpers.js';
 
 const RESULT_WINDOW = 10_000;
 const PARTIAL_DATE_PATTERN = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/;
@@ -38,6 +38,30 @@ const toLowerArray = (v: unknown): unknown => {
   const arr = toOptionalArray(v);
   return Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x.toLowerCase() : x)) : arr;
 };
+
+/**
+ * Resource type preprocess: a lone string or array, each value resolved to its id
+ * (any case; `publication::publication-article` → `publication-article`). A value
+ * that names no resource type raises its own issue here rather than reaching the
+ * enum: the enum's issue would point at an array index a lone-string input never
+ * had, and read as a missing field.
+ */
+const resourceTypeInput = z.preprocess((v, ctx) => {
+  const arr = toOptionalArray(v);
+  if (!Array.isArray(arr)) return arr;
+  const unknown = arr.filter(
+    (x): x is string => typeof x === 'string' && !resolveResourceTypeId(x),
+  );
+  if (unknown.length) {
+    ctx.addIssue({
+      code: 'custom',
+      input: v,
+      message: `${unknown.map((x) => JSON.stringify(x.slice(0, 100))).join(', ')} ${unknown.length > 1 ? 'are not Zenodo resource type ids' : 'is not a Zenodo resource type id'}. Expected one of: ${RESOURCE_TYPE_IDS.join(', ')} (a subtype may also be written <type>::<id>, e.g. publication::publication-article). Look types up with zenodo_lookup_vocabulary (vocabulary: resource_types).`,
+    });
+    return z.NEVER;
+  }
+  return arr.map((x) => (typeof x === 'string' ? (resolveResourceTypeId(x) ?? x) : x));
+}, z.array(z.enum(RESOURCE_TYPE_IDS)).max(10).optional());
 
 /** As {@link toLowerArray}, with a leading `.` stripped from each value (`.CSV` → `csv`). */
 const toFileTypes = (v: unknown): unknown => {
@@ -179,7 +203,7 @@ const HitSchema = z
 export const searchRecords = tool('zenodo_search_records', {
   title: 'Search Zenodo records',
   description:
-    'Search Zenodo\'s open research repository — datasets, software releases, publications, and other deposits — by keyword query plus filters for resource type, community, funder, grant, creator ORCID, file type, license, access status, and publication date. Returns one summary per deposit (ids, DOIs, title, type, version, creators, license, access, file totals, usage counts) plus facet counts over the full match set. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.',
+    'Search Zenodo\'s open research repository — datasets, software releases, publications, and other deposits — by keyword query plus filters for resource type, community, funder, grant, creator ORCID, file type, license, access status, and publication date. Returns one summary per deposit (ids, DOIs, title, type, version, creators, license, access, file totals, usage counts) plus facet counts over the full match set, every filter applied. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     query: z
@@ -187,11 +211,9 @@ export const searchRecords = tool('zenodo_search_records', {
       .describe(
         'Keyword query. Terms are OR-ed unless joined with AND; "quoted phrases" match exactly; field syntax such as metadata.title:"…" or doi:"10.5281/zenodo.N" works. Escape a literal / as \\/. A bare DOI or record URL is rejected; open it with zenodo_get_record instead. Omit to browse with filters only.',
       ),
-    resource_type: z
-      .preprocess(toLowerArray, z.array(z.enum(RESOURCE_TYPE_IDS)).max(10).optional())
-      .describe(
-        'Resource type ids, OR-ed (a single string is accepted): dataset, software, publication, publication-article, image-photo, … Look ids up with zenodo_lookup_vocabulary (vocabulary: resource_types).',
-      ),
+    resource_type: resourceTypeInput.describe(
+      'Resource type ids, OR-ed (a single string is accepted): dataset, software, publication, publication-article, image-photo, … Any case; a subtype may also be written in the <type>::<id> form zenodo_lookup_vocabulary shows as its search value (publication::publication-article). A top-level type includes its subtypes. Look ids up with zenodo_lookup_vocabulary (vocabulary: resource_types).',
+    ),
     community: z
       .preprocess(blankToUndefined, z.string().max(200).optional())
       .describe(
@@ -247,8 +269,10 @@ export const searchRecords = tool('zenodo_search_records', {
         'License id, e.g. cc-by-4.0, cc0-1.0, mit (lowercased). Find ids with zenodo_lookup_vocabulary (vocabulary: licenses).',
       ),
     access_status: z
-      .preprocess(blankToUndefined, z.enum(ACCESS_STATUSES).optional())
-      .describe('Access status: open, restricted, embargoed, or metadata-only.'),
+      .preprocess(enumPreprocess(ACCESS_STATUSES), z.enum(ACCESS_STATUSES).optional())
+      .describe(
+        'Access status: open, restricted, embargoed, or metadata-only. Case, spaces, hyphens, and underscores are ignored when matching (Metadata Only reads as metadata-only).',
+      ),
     published_from: dateField(
       'Earliest publication date, YYYY, YYYY-MM, or YYYY-MM-DD; a partial date starts at its first day.',
     ),
@@ -260,9 +284,9 @@ export const searchRecords = tool('zenodo_search_records', {
       .default(false)
       .describe('Include superseded versions; by default only the latest version is searched.'),
     sort: z
-      .preprocess(blankToUndefined, z.enum(SEARCH_SORTS).optional())
+      .preprocess(enumPreprocess(SEARCH_SORTS), z.enum(SEARCH_SORTS).optional())
       .describe(
-        'Sort order: bestmatch, newest, oldest, mostviewed, mostdownloaded, updated-desc, updated-asc. Defaults to bestmatch with a query, newest without.',
+        'Sort order: bestmatch, newest, oldest, mostviewed, mostdownloaded, updated-desc, updated-asc. Case, spaces, hyphens, and underscores are ignored when matching (MostViewed reads as mostviewed). Defaults to bestmatch with a query, newest without.',
       ),
     page: z
       .number()
@@ -315,7 +339,9 @@ export const searchRecords = tool('zenodo_search_records', {
           )
           .describe('The 10 most recent publication years present.'),
       })
-      .describe('Facet counts over the full match set, not just this page.'),
+      .describe(
+        'Facet counts over the full match set (every filter applied, so they agree with total), not just this page.',
+      ),
   }),
   enrichment: {
     truncated: z.boolean().describe('True when more reachable matches follow this page.'),
@@ -484,11 +510,7 @@ export const searchRecords = tool('zenodo_search_records', {
       size: input.size,
       sort,
       ...(input.query ? { query: input.query } : {}),
-      ...(input.resource_type
-        ? {
-            resourceTypes: input.resource_type.map((id) => getResourceType(id)?.searchValue ?? id),
-          }
-        : {}),
+      ...(input.resource_type ? { resourceTypes: input.resource_type } : {}),
       ...(input.file_type ? { fileTypes: input.file_type } : {}),
       ...(input.access_status ? { accessStatus: input.access_status } : {}),
       ...(communityId ? { communityId } : {}),
@@ -637,7 +659,8 @@ export const searchRecords = tool('zenodo_search_records', {
     const f = result.facets;
     const bucketList = (buckets: { count: number; id: string; label: string }[]) =>
       buckets.map((b) => `${inline(b.label)} \`${inline(b.id)}\` (${b.count})`).join('; ');
-    lines.push('', '### Facets');
+    const facetsHeading = '### Facets (full match set, every filter applied)';
+    lines.push('', facetsHeading);
     if (f.resource_type.length) {
       lines.push('**Resource types:**');
       for (const b of f.resource_type) {
@@ -658,7 +681,7 @@ export const searchRecords = tool('zenodo_search_records', {
         `**Publication years:** ${f.publication_year.map((y) => `${inline(y.year)} (${y.count})`).join('; ')}`,
       );
     }
-    if (lines.at(-1) === '### Facets') lines.push('No facet counts (nothing matched).');
+    if (lines.at(-1) === facetsHeading) lines.push('No facet counts (nothing matched).');
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

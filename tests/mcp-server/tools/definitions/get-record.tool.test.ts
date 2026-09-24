@@ -102,6 +102,8 @@ describe('zenodo_get_record — found', () => {
     ['10.5281/zenodo.22705923', 'zenodo_doi'],
     ['https://zenodo.org/records/22705923', 'url'],
     ['https://doi.org/10.5281/zenodo.22705923', 'url'],
+    ['<10.5281/zenodo.22705923>.', 'zenodo_doi'],
+    ['<https://doi.org/10.5281/zenodo.22705923>.', 'url'],
   ])('resolves %s as a version (input kind %s)', async (id, inputKind) => {
     serveRecord('22705923', recordFixture);
     const { result, enrichment } = await call({ id });
@@ -327,6 +329,16 @@ describe('zenodo_get_record — citations', () => {
     const { result } = await call({ id: '22705923', citation_style: 'bibtex' });
     expect(result.citation).toMatch(/^@software\{the_scikit_learn_developers_2026_22705923,/);
     expect(queryOf(fm.calls[1]?.request as Request)).toEqual([]);
+  });
+
+  it.each([
+    ['APA', 'apa'],
+    ['BibTeX', 'bibtex'],
+    ['CSL-JSON', 'csl-json'],
+    ['csl json', 'csl-json'],
+    ['Chicago_Author_Date', 'chicago-author-date'],
+  ])('folds citation_style %j to %s', (value, style) => {
+    expect(getRecord.input.parse({ id: '1', citation_style: value }).citation_style).toBe(style);
   });
 
   it('reads a blank citation_style as unset and fetches no citation', async () => {

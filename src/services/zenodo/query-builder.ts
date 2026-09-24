@@ -6,6 +6,8 @@
  * @module services/zenodo/query-builder
  */
 
+import { getResourceType } from './resource-types.js';
+
 /** Sort options Zenodo's record search accepts. */
 export const SEARCH_SORTS = [
   'bestmatch',
@@ -41,7 +43,7 @@ export interface SearchFilters {
   /** Expanded full date, `YYYY-MM-DD`. */
   publishedTo?: string;
   query?: string;
-  /** `resource_type` param values (`dataset`, `publication::publication-article`). */
+  /** Resource type ids (`dataset`, `publication-article`), OR-ed. */
   resourceTypes?: string[];
   size: number;
   sort: SearchSort;
@@ -58,7 +60,30 @@ export function quoteValue(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
-/** Composes `q` and the allowlisted params from resolved filters. */
+/** One clause, or several OR-ed inside parentheses. */
+function anyOf(clauses: string[]): string {
+  return clauses.length === 1 ? (clauses[0] as string) : `(${clauses.join(' OR ')})`;
+}
+
+/**
+ * The `q` clause for one resource type id. A top-level type matches on
+ * `props.type`, which covers its subtypes (`image` includes `image-photo`); a
+ * subtype matches on its own id.
+ */
+function resourceTypeClause(id: string): string {
+  return getResourceType(id)?.parentType
+    ? `metadata.resource_type.id:${quoteValue(id)}`
+    : `metadata.resource_type.props.type:${quoteValue(id)}`;
+}
+
+/**
+ * Composes `q` and the allowlisted params from resolved filters. Resource type, file
+ * type, and access status compose into `q` rather than riding Zenodo's
+ * `resource_type` / `file_type` / `access_status` params: those params are
+ * post-filters, applied after the aggregations are computed, so the facet counts
+ * would ignore them and contradict `total`. As `q` clauses they narrow hits and
+ * facets alike, with the same totals.
+ */
 export function buildSearch(filters: SearchFilters): BuiltSearch {
   const clauses: string[] = [];
   if (filters.funderRor)
@@ -74,6 +99,12 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
     );
   }
   if (filters.license) clauses.push(`metadata.rights.id:${quoteValue(filters.license)}`);
+  if (filters.resourceTypes?.length)
+    clauses.push(anyOf(filters.resourceTypes.map(resourceTypeClause)));
+  if (filters.fileTypes?.length) {
+    clauses.push(anyOf(filters.fileTypes.map((t) => `files.types:${quoteValue(t)}`)));
+  }
+  if (filters.accessStatus) clauses.push(`access.status:${quoteValue(filters.accessStatus)}`);
   if (filters.publishedFrom || filters.publishedTo) {
     clauses.push(
       `metadata.publication_date:[${filters.publishedFrom ?? '*'} TO ${filters.publishedTo ?? '*'}]`,
@@ -91,9 +122,6 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
 
   const params: [string, string][] = [];
   if (q) params.push(['q', q]);
-  for (const t of filters.resourceTypes ?? []) params.push(['resource_type', t]);
-  for (const t of filters.fileTypes ?? []) params.push(['file_type', t]);
-  if (filters.accessStatus) params.push(['access_status', filters.accessStatus]);
   if (filters.communityId) params.push(['communities', filters.communityId]);
   if (filters.allVersions) params.push(['all_versions', 'true']);
   params.push(

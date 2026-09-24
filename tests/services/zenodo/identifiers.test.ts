@@ -97,6 +97,46 @@ describe('parseRecordRef — accepted forms', () => {
     });
   });
 
+  it.each([
+    ['<10.5281/zenodo.22705923>.', '22705923', 'zenodo_doi'],
+    ['<10.5281/zenodo.22705923>,', '22705923', 'zenodo_doi'],
+    ['<10.5281/zenodo.22705923>;', '22705923', 'zenodo_doi'],
+    ['<10.5281/zenodo.22705923.>', '22705923', 'zenodo_doi'],
+    ['<10.5281/zenodo.22705923.>.', '22705923', 'zenodo_doi'],
+    ['"10.5281/zenodo.22705923".', '22705923', 'zenodo_doi'],
+    ['"<10.5281/zenodo.22705923>".', '22705923', 'zenodo_doi'],
+    ['<"10.5281/zenodo.22705923".>', '22705923', 'zenodo_doi'],
+    ['“22705923”, ', '22705923', 'record_id'],
+    ['<https://doi.org/10.5281/zenodo.22705923>.', '22705923', 'url'],
+    ['<https://zenodo.org/records/22705923>;', '22705923', 'url'],
+  ] as const)(
+    'strips wrapping and trailing punctuation in any order: %j',
+    (raw, recid, inputKind) => {
+      expect(parseRecordRef(raw)).toEqual({ kind: 'recid', recid, inputKind });
+    },
+  );
+
+  it('drops punctuation after a wrapper around an external DOI, keeping inner punctuation for the retry', () => {
+    expect(parseRecordRef('<10.3897/ap.e134190>.')).toEqual({
+      kind: 'external_doi',
+      doi: '10.3897/ap.e134190',
+      inputKind: 'external_doi',
+    });
+    expect(parseRecordRef('<10.3897/ap.e134190.>')).toEqual({
+      kind: 'external_doi',
+      doi: '10.3897/ap.e134190.',
+      strippedDoi: '10.3897/ap.e134190',
+      inputKind: 'external_doi',
+    });
+  });
+
+  it('applies the same unwrapping to funder references', () => {
+    expect(parseFunderRef('<https://ror.org/01cwqze88>.')).toEqual({
+      kind: 'ror',
+      ror: '01cwqze88',
+    });
+  });
+
   it('decodes a percent-encoded DOI path', () => {
     expect(parseRecordRef('https://doi.org/10.5281%2Fzenodo.591564')).toEqual({
       kind: 'recid',

@@ -16,17 +16,7 @@ import {
   type SearchFilters,
 } from '@/services/zenodo/query-builder.js';
 
-const ALLOWLIST = new Set([
-  'q',
-  'resource_type',
-  'file_type',
-  'access_status',
-  'communities',
-  'all_versions',
-  'sort',
-  'page',
-  'size',
-]);
+const ALLOWLIST = new Set(['q', 'communities', 'all_versions', 'sort', 'page', 'size']);
 
 const base: SearchFilters = { allVersions: false, page: 1, size: 10, sort: 'bestmatch' };
 
@@ -93,10 +83,11 @@ describe('buildSearch', () => {
     expect(buildSearch({ ...base, license: 'a"b\\c' }).q).toBe('metadata.rights.id:"a\\"b\\\\c"');
   });
 
-  it('repeats resource_type and file_type in order and sends the community UUID', () => {
+  it('composes resource type, file type, and access status into q (OR within a filter) so facets reflect them', () => {
     const built = buildSearch({
       ...base,
-      resourceTypes: ['dataset', 'publication::publication-article'],
+      query: 'air quality',
+      resourceTypes: ['dataset', 'publication-article'],
       fileTypes: ['csv', 'zip'],
       accessStatus: 'metadata-only',
       communityId: '9649d306-cf94-49cc-a14d-934ca8fcb515',
@@ -104,18 +95,34 @@ describe('buildSearch', () => {
       page: 3,
       size: 25,
     });
+    expect(built.q).toBe(
+      [
+        '(air quality)',
+        '(metadata.resource_type.props.type:"dataset" OR metadata.resource_type.id:"publication-article")',
+        '(files.types:"csv" OR files.types:"zip")',
+        'access.status:"metadata-only"',
+      ].join(' AND '),
+    );
     expect(built.params).toEqual([
-      ['resource_type', 'dataset'],
-      ['resource_type', 'publication::publication-article'],
-      ['file_type', 'csv'],
-      ['file_type', 'zip'],
-      ['access_status', 'metadata-only'],
+      ['q', built.q],
       ['communities', '9649d306-cf94-49cc-a14d-934ca8fcb515'],
       ['all_versions', 'true'],
       ['sort', 'bestmatch'],
       ['page', '3'],
       ['size', '25'],
     ]);
+  });
+
+  it('matches a top-level type on props.type (covering its subtypes) and a subtype on its id', () => {
+    expect(buildSearch({ ...base, resourceTypes: ['image'] }).q).toBe(
+      'metadata.resource_type.props.type:"image"',
+    );
+    expect(buildSearch({ ...base, resourceTypes: ['image-photo'] }).q).toBe(
+      'metadata.resource_type.id:"image-photo"',
+    );
+    expect(buildSearch({ ...base, fileTypes: ['pdf'], accessStatus: 'open' }).q).toBe(
+      'files.types:"pdf" AND access.status:"open"',
+    );
   });
 
   it('omits all_versions when false', () => {

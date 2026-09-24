@@ -1,12 +1,12 @@
 /**
  * @fileoverview Static table of Zenodo's 43 resource types (the entries of
  * `/api/vocabularies/resourcetypes`, verified 2026-09-23). Source of the search
- * `resource_type` enum, of the `<type>::<id>` search value a subtype needs, and of
+ * `resource_type` enum, of the parent type a subtype's search clause needs, and of
  * the `resource_types` vocabulary lookup.
  * @module services/zenodo/resource-types
  */
 
-/** One resource type. `searchValue` is what the `resource_type` search param takes. */
+/** One resource type. `searchValue` is Zenodo's own spelling of it (`<type>::<id>` for a subtype). */
 export interface ResourceType {
   id: string;
   label: string;
@@ -77,6 +77,20 @@ const BY_ID = new Map(RESOURCE_TYPES.map((t) => [t.id, t]));
 /** Looks a resource type up by id. */
 export function getResourceType(id: string): ResourceType | undefined {
   return BY_ID.get(id);
+}
+
+/**
+ * Resolves a resource type as a caller may write it to its id: any case, and the
+ * `<type>::<id>` form Zenodo spells a subtype with (`publication::publication-article`
+ * → `publication-article`) when the prefix is that subtype's parent. Returns
+ * `undefined` when the value names no resource type.
+ */
+export function resolveResourceTypeId(raw: string): string | undefined {
+  const value = raw.trim().toLowerCase();
+  const sep = value.indexOf('::');
+  if (sep === -1) return BY_ID.has(value) ? value : undefined;
+  const type = BY_ID.get(value.slice(sep + 2));
+  return type?.parentType === value.slice(0, sep) ? type.id : undefined;
 }
 
 const normalize = (s: string) =>

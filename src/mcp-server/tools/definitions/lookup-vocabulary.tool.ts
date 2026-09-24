@@ -12,10 +12,22 @@ import { filterResourceTypes } from '@/services/zenodo/resource-types.js';
 import type { VocabularyPage } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { inline, quoteBlock } from '../render.js';
-import { blankToUndefined } from '../schema-helpers.js';
+import { blankToUndefined, enumPreprocess } from '../schema-helpers.js';
 
 const VOCABULARIES = ['communities', 'funders', 'awards', 'licenses', 'resource_types'] as const;
+type Vocabulary = (typeof VOCABULARIES)[number];
 const RESULT_WINDOW = 10_000;
+
+/** What to try after a query matched nothing, per vocabulary. */
+const ZERO_HIT_ADVICE: Record<Vocabulary, string> = {
+  communities: "try a shorter name, a keyword from the community's title, or the project's acronym",
+  funders: "try a shorter name or the funder's acronym",
+  awards: "try the grant number, the project's acronym, or a shorter keyword from the award title",
+  licenses:
+    'try a shorter keyword such as cc-by, gpl, or mit, or call again without query to browse all licenses',
+  resource_types:
+    'every word must appear in a type id or label, so try a shorter keyword, or call again without query to list all 43 types',
+};
 
 const EntrySchema = z
   .object({
@@ -79,7 +91,7 @@ const EntrySchema = z
       .string()
       .optional()
       .describe(
-        'The value Zenodo’s search matches for this type (<type>::<id> for a subtype); informational — pass filter_value (resource_types).',
+        'Zenodo’s own spelling of this type (<type>::<id> for a subtype); zenodo_search_records accepts it or filter_value as resource_type (resource_types).',
       ),
   })
   .describe(
@@ -148,9 +160,20 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     vocabulary: z
-      .enum(VOCABULARIES)
+      .preprocess(
+        enumPreprocess(VOCABULARIES, {
+          community: 'communities',
+          funder: 'funders',
+          award: 'awards',
+          grant: 'awards',
+          grants: 'awards',
+          license: 'licenses',
+          resource_type: 'resource_types',
+        }),
+        z.enum(VOCABULARIES),
+      )
       .describe(
-        'Which vocabulary to search: communities, funders, awards (grants), licenses, or resource_types.',
+        'Which vocabulary to search: communities, funders, awards (grants), licenses, or resource_types. Case, spaces, hyphens, and underscores are ignored when matching, and the singular (funder, license, resource type) and grants are accepted.',
       ),
     query: z
       .preprocess(blankToUndefined, z.string().max(200).optional())
@@ -283,7 +306,7 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
     if (total === 0) {
       notice.push(
         input.query
-          ? `No ${input.vocabulary} matched "${inline(input.query)}"; try a shorter name, the acronym, or the funder's or project's acronym.`
+          ? `No ${input.vocabulary} matched "${inline(input.query)}"; ${ZERO_HIT_ADVICE[input.vocabulary]}${input.funder ? ', or drop funder to search every funder’s grants' : ''}.`
           : `No ${input.vocabulary} entries were returned.`,
       );
     } else if (entries.length === 0) {

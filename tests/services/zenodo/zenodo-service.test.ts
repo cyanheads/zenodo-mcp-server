@@ -27,17 +27,7 @@ import {
 } from '../../helpers/zenodo-fixtures.js';
 
 const NOW = new Date('2026-09-23T12:00:00Z');
-const SEARCH_ALLOWLIST = new Set([
-  'q',
-  'resource_type',
-  'file_type',
-  'access_status',
-  'communities',
-  'all_versions',
-  'sort',
-  'page',
-  'size',
-]);
+const SEARCH_ALLOWLIST = new Set(['q', 'communities', 'all_versions', 'sort', 'page', 'size']);
 
 let fm: FetchMockHarness;
 let service: ZenodoService;
@@ -879,7 +869,7 @@ describe('searchRecords', () => {
       {
         query: 'dairy',
         license: 'cc-by-4.0',
-        resourceTypes: ['publication::publication-article'],
+        resourceTypes: ['publication-article'],
         fileTypes: ['pdf'],
         allVersions: false,
         page: 1,
@@ -890,8 +880,10 @@ describe('searchRecords', () => {
     );
     const params = queryOf(fm.calls[0]?.request as Request);
     for (const [key] of params) expect(SEARCH_ALLOWLIST.has(key)).toBe(true);
-    expect(params[0]).toEqual(['q', '(dairy) AND metadata.rights.id:"cc-by-4.0"']);
-    expect(result.q).toBe('(dairy) AND metadata.rights.id:"cc-by-4.0"');
+    const q =
+      '(dairy) AND metadata.rights.id:"cc-by-4.0" AND metadata.resource_type.id:"publication-article" AND files.types:"pdf"';
+    expect(params[0]).toEqual(['q', q]);
+    expect(result.q).toBe(q);
     expect(result.total).toBe(1);
     expect(result.hits[0]).toMatchObject({
       recid: '15308258',

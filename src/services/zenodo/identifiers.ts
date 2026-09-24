@@ -43,13 +43,28 @@ const ZENODO_DOI_PATTERN = /^10\.5281\/zenodo\.(\d+)$/i;
 const ZENODO_SUFFIX_PATTERN = /^zenodo\.(\d+)$/i;
 const TRAILING_PUNCTUATION = /[.,;]+$/;
 
-/** Removes wrapping `<…>`, `"…"`, `'…'`, and surrounding whitespace, repeatedly. */
+/** True when `s` is enclosed in `<…>` or a pair of quote characters. */
+function isWrapped(s: string): boolean {
+  return (
+    s.length >= 2 &&
+    ((s.startsWith('<') && s.endsWith('>')) || (/^["'“”‘’]/.test(s) && /["'“”‘’]$/.test(s)))
+  );
+}
+
+/**
+ * Removes wrapping `<…>`, `"…"`, `'…'`, and surrounding whitespace, repeatedly, in
+ * any nesting order. Trailing `.`/`,`/`;` after a closing wrapper — an id copied
+ * out of a sentence such as `…available at <https://doi.org/…>.` — sits outside the
+ * value and is dropped with it; punctuation inside the wrapper is left to the
+ * per-form rules.
+ */
 function stripWrapping(raw: string): string {
   let s = raw.trim();
   for (;;) {
     const before = s;
-    if (s.startsWith('<') && s.endsWith('>')) s = s.slice(1, -1).trim();
-    if (s.length >= 2 && /^["'“”‘’]/.test(s) && /["'“”‘’]$/.test(s)) s = s.slice(1, -1).trim();
+    const unpunctuated = s.replace(TRAILING_PUNCTUATION, '').trimEnd();
+    if (unpunctuated !== s && isWrapped(unpunctuated)) s = unpunctuated;
+    if (isWrapped(s)) s = s.slice(1, -1).trim();
     if (s === before) return s;
   }
 }
@@ -135,8 +150,9 @@ function parseUrl(raw: string): RecordRef | ParseFailure {
 /**
  * Classifies a record reference. Accepts a record id, `zenodo.N`, a Zenodo DOI
  * (any case, optionally `doi:`-prefixed), another DOI, a doi.org URL, or a
- * zenodo.org record/DOI/badge URL. Wrapping `<>` / quotes and trailing
- * punctuation after a record id or Zenodo DOI are stripped. Query strings and
+ * zenodo.org record/DOI/badge URL. Wrapping `<>` / quotes (with any punctuation
+ * after them) and trailing punctuation after a record id or Zenodo DOI are
+ * stripped, in whichever order they were combined. Query strings and
  * fragments are ignored. Never fetches anything.
  */
 export function parseRecordRef(raw: string): RecordRef | ParseFailure {

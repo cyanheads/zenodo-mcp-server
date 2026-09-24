@@ -9,6 +9,7 @@
  * @module tests/mcp-server/tools/definitions/search-records.tool.test
  */
 
+import { z } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
 import { JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
 import {
@@ -37,17 +38,7 @@ import {
 
 const NOW = new Date('2026-09-23T12:00:00Z');
 const SYMBA_UUID = '09369e2d-6fa3-45bc-a92b-64fa8757f144';
-const SEARCH_ALLOWLIST = new Set([
-  'q',
-  'resource_type',
-  'file_type',
-  'access_status',
-  'communities',
-  'all_versions',
-  'sort',
-  'page',
-  'size',
-]);
+const SEARCH_ALLOWLIST = new Set(['q', 'communities', 'all_versions', 'sort', 'page', 'size']);
 
 const recovery = (reason: string) =>
   searchRecords.errors?.find((e) => e.reason === reason)?.recovery as string;
@@ -258,23 +249,44 @@ describe('zenodo_search_records — query, sort, and paging', () => {
 });
 
 describe('zenodo_search_records — filters reaching the request', () => {
-  it('lowercases resource types and sends subtypes in their <type>::<id> form', async () => {
+  it('lowercases resource types and composes them into q, a top-level type by props.type and a subtype by id', async () => {
     serveSearch();
     await call({ resource_type: ['Dataset', ' publication-article ', 'IMAGE-PHOTO'] });
-    expect(sentParams().filter(([k]) => k === 'resource_type')).toEqual([
-      ['resource_type', 'dataset'],
-      ['resource_type', 'publication::publication-article'],
-      ['resource_type', 'image::image-photo'],
-    ]);
+    expect(sentQ()).toBe(
+      '(metadata.resource_type.props.type:"dataset" OR metadata.resource_type.id:"publication-article" OR metadata.resource_type.id:"image-photo")',
+    );
+    expect(sentParams().some(([k]) => k === 'resource_type')).toBe(false);
   });
 
   it('accepts a lone resource-type string', async () => {
     serveSearch();
     await call({ resource_type: 'software-computationalnotebook' });
-    expect(sentParams()).toContainEqual([
-      'resource_type',
-      'software::software-computationalnotebook',
-    ]);
+    expect(sentQ()).toBe('metadata.resource_type.id:"software-computationalnotebook"');
+  });
+
+  it.each([
+    'publication::publication-article',
+    'Publication::Publication-Article',
+    ['publication::publication-article'],
+  ])('accepts the <type>::<id> form lookup prints as its search value: %j', async (value) => {
+    serveSearch();
+    const { result } = await call({ resource_type: value });
+    expect(sentQ()).toBe('metadata.resource_type.id:"publication-article"');
+    expect(result).toEqual(expect.schemaMatching(searchRecords.output));
+  });
+
+  it.each<[string | string[], string]>([
+    ['publication::datasets', 'lone string'],
+    [['dataset', 'image::publication-article'], 'array'],
+    ['nonsense', 'lone string'],
+  ])('rejects an unknown resource type %j (%s) by name, not as a missing field', async (value) => {
+    const result = await runToolContract(searchRecords, { resource_type: value });
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/is not a Zenodo resource type id\. Expected one of: dataset, event/);
+    expect(text).toContain('zenodo_lookup_vocabulary (vocabulary: resource_types)');
+    expect(text).not.toContain('Missing required field');
+    expect(fm.calls).toHaveLength(0);
   });
 
   it.each([
@@ -353,18 +365,49 @@ describe('zenodo_search_records — filters reaching the request', () => {
   it('lowercases the license and file types and strips a leading dot', async () => {
     serveSearch();
     await call({ license: 'MIT', file_type: ['.CSV', 'Zip'] });
-    const params = sentParams();
-    expect(params).toContainEqual(['q', 'metadata.rights.id:"mit"']);
-    expect(params.filter(([k]) => k === 'file_type')).toEqual([
-      ['file_type', 'csv'],
-      ['file_type', 'zip'],
-    ]);
+    expect(sentQ()).toBe('metadata.rights.id:"mit" AND (files.types:"csv" OR files.types:"zip")');
   });
 
   it('accepts a lone file-type string', async () => {
     serveSearch();
     await call({ file_type: 'PDF' });
-    expect(sentParams()).toContainEqual(['file_type', 'pdf']);
+    expect(sentQ()).toBe('files.types:"pdf"');
+  });
+
+  it.each([
+    ['Open', 'open'],
+    ['RESTRICTED', 'restricted'],
+    ['metadata only', 'metadata-only'],
+    ['Metadata_Only', 'metadata-only'],
+  ])('folds access_status %j to %s and composes it into q', async (value, status) => {
+    serveSearch();
+    await call({ access_status: value });
+    expect(sentQ()).toBe(`access.status:"${status}"`);
+  });
+
+  it.each([
+    ['Newest', 'newest'],
+    ['MostViewed', 'mostviewed'],
+    ['most viewed', 'mostviewed'],
+    ['UPDATED_DESC', 'updated-desc'],
+  ])('folds sort %j to %s', async (value, sort) => {
+    serveSearch();
+    const { enrichment } = await call({ sort: value });
+    expect(sentParams()).toContainEqual(['sort', sort]);
+    expect(enrichment.appliedSort).toBe(sort);
+  });
+
+  it('keeps the advertised enums canonical while accepting folded values', () => {
+    const schema = z.toJSONSchema(searchRecords.input) as {
+      properties: Record<string, { enum?: string[] }>;
+    };
+    expect(schema.properties.access_status?.enum).toEqual([
+      'open',
+      'restricted',
+      'embargoed',
+      'metadata-only',
+    ]);
+    expect(schema.properties.sort?.enum).toContain('updated-desc');
   });
 
   it.each([
@@ -415,13 +458,10 @@ describe('zenodo_search_records — filters reaching the request', () => {
       size: 5,
     });
     const q =
-      '(circularity OR symbiosis) AND metadata.funding.funder.id:"00k4n6c32" AND metadata.funding.award.id:"00k4n6c32::101135562" AND metadata.creators.person_or_org.identifiers.identifier:"0000-0002-1825-0097" AND metadata.rights.id:"cc-by-4.0" AND metadata.publication_date:[2024-01-01 TO 2025-06-30]';
+      '(circularity OR symbiosis) AND metadata.funding.funder.id:"00k4n6c32" AND metadata.funding.award.id:"00k4n6c32::101135562" AND metadata.creators.person_or_org.identifiers.identifier:"0000-0002-1825-0097" AND metadata.rights.id:"cc-by-4.0" AND metadata.resource_type.id:"publication-deliverable" AND files.types:"pdf" AND access.status:"open" AND metadata.publication_date:[2024-01-01 TO 2025-06-30]';
     const params = sentParams();
     expect(params).toEqual([
       ['q', q],
-      ['resource_type', 'publication::publication-deliverable'],
-      ['file_type', 'pdf'],
-      ['access_status', 'open'],
       ['communities', SYMBA_UUID],
       ['all_versions', 'true'],
       ['sort', 'newest'],
@@ -812,7 +852,7 @@ describe('zenodo_search_records — format()', () => {
       '**Files:** 1 (2202807 bytes) | **Views:** 89 | **Downloads:** 324',
       '**Communities:** symbaproject, eu',
       '**Snippet:** A report summarizing the SYMBA forum',
-      '### Facets',
+      '### Facets (full match set, every filter applied)',
       '- Publication `publication` (68559) — Journal article `publication-article` (40621);',
       '- Dataset `dataset` (25532)',
       '**Access status:** Open `open` (103276); Restricted `restricted` (7162); Embargoed `embargoed` (376)',

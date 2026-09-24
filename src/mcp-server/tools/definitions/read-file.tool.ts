@@ -9,7 +9,14 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { downloadUrl, parseRecordRef, recordUrl } from '@/services/zenodo/identifiers.js';
-import { cutPreview, isPreviewable, isZip, languageHint } from '@/services/zenodo/text-preview.js';
+import {
+  cutPreview,
+  isZip,
+  languageHint,
+  looksLikeText,
+  type PreviewMode,
+  previewMode,
+} from '@/services/zenodo/text-preview.js';
 import type { ContentRead, ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { fence, inline } from '../render.js';
@@ -18,10 +25,28 @@ import { blankToUndefined } from '../schema-helpers.js';
 const STATUSES = ['text', 'not_text', 'restricted', 'empty'] as const;
 type Status = (typeof STATUSES)[number];
 
+/** The largest max_bytes a call accepts. */
+const MAX_READ_BYTES = 65_536;
+
+/**
+ * Guidance when a ZIP member read stops at max_bytes. A member cannot be continued
+ * at an offset, so the next step depends on whether one larger read covers it.
+ */
+function memberTruncationNotice(end: number, size: number | undefined, maxBytes: number): string {
+  const shown = `Showing bytes 0–${end} of ${size ?? 'an unknown total'}`;
+  if (size !== undefined && size <= MAX_READ_BYTES) {
+    return `${shown}; call zenodo_read_file again with max_bytes ${size} to read the whole member.`;
+  }
+  if (size === undefined && maxBytes < MAX_READ_BYTES) {
+    return `${shown}; call zenodo_read_file again with max_bytes ${MAX_READ_BYTES} to read more of this member, and download the archive from download_url if that still stops short.`;
+  }
+  return `${shown}; the member is larger than the ${MAX_READ_BYTES}-byte read cap, so download the archive from download_url for the rest${maxBytes < MAX_READ_BYTES ? ` (max_bytes ${MAX_READ_BYTES} shows more of its start)` : ''}.`;
+}
+
 export const readFile = tool('zenodo_read_file', {
   title: 'Read a Zenodo file excerpt',
   description:
-    'Read a bounded UTF-8 excerpt (up to 64 KiB per call) of one text file in a Zenodo deposit — a README, CITATION.cff, CSV head, notebook, or script — or of one member inside a .zip file, without downloading the archive. Continue a top-level file from next_offset. Binary files, restricted files, and unrecognized types return metadata and the download URL without content. File content is depositor-supplied and carries the deposit’s license.',
+    'Read a bounded UTF-8 excerpt (up to 64 KiB per call) of one text file in a Zenodo deposit — a README, CITATION.cff, CSV head, notebook, or script — or of one member inside a .zip file, without downloading the archive. Continue a top-level file from next_offset. A file with a text MIME type or extension is read directly; an extensionless file Zenodo types application/octet-stream (LICENSE, COPYING, Makefile) is read and returned only when its content is UTF-8 text. Binary files, restricted files, and other types return metadata and the download URL without content. File content is depositor-supplied and carries the deposit’s license.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     id: z
@@ -54,7 +79,7 @@ export const readFile = tool('zenodo_read_file', {
       .number()
       .int()
       .min(256)
-      .max(65_536)
+      .max(MAX_READ_BYTES)
       .default(16_384)
       .describe('Maximum bytes to read (256–65536).'),
   }),
@@ -65,7 +90,7 @@ export const readFile = tool('zenodo_read_file', {
     status: z
       .enum(STATUSES)
       .describe(
-        'text: content returned; not_text: binary or unrecognized type; restricted: the content is not available anonymously — the record’s files are restricted or embargoed (key is not checked, since no manifest is exposed), or Zenodo refused this one file; empty: zero-byte file.',
+        'text: content returned; not_text: binary content, or a type that is not read as text; restricted: the content is not available anonymously — the record’s files are restricted or embargoed (key is not checked, since no manifest is exposed), or Zenodo refused this one file; empty: zero-byte file.',
       ),
     mimetype: z.string().optional().describe('MIME type of the file or member, when reported.'),
     file_size: z.number().optional().describe('Size of the file or member in bytes, when known.'),
@@ -292,7 +317,14 @@ export const readFile = tool('zenodo_read_file', {
     }
 
     let meta: { mimetype?: string; size?: number };
+    let mode: PreviewMode;
     let read: ContentRead;
+    const notPreviewable = () =>
+      withoutText(
+        'not_text',
+        `${displayName} is not a previewable text file (${meta.mimetype ?? 'unknown type'}); download it from download_url.`,
+        meta,
+      );
     if (member) {
       if (!isZip(entry.key, entry.mimetype)) {
         throw ctx.fail(
@@ -318,13 +350,8 @@ export const readFile = tool('zenodo_read_file', {
         ...(listed?.size !== undefined ? { size: listed.size } : {}),
       };
       if (meta.size === 0) return withoutText('empty', `${displayName} is empty.`, meta);
-      if (!isPreviewable(member, meta.mimetype)) {
-        return withoutText(
-          'not_text',
-          `${displayName} is not a previewable text file (${meta.mimetype ?? 'unknown type'}); download it from download_url.`,
-          meta,
-        );
-      }
+      mode = previewMode(member, meta.mimetype);
+      if (mode === 'binary') return notPreviewable();
       read = await service.readMember(recid, entry.key, member, input.max_bytes, ctx);
       if (read.status === 'not_found') {
         throw ctx.fail(
@@ -355,13 +382,8 @@ export const readFile = tool('zenodo_read_file', {
         }
         return withoutText('empty', `${displayName} is empty.`, meta);
       }
-      if (!isPreviewable(entry.key, meta.mimetype)) {
-        return withoutText(
-          'not_text',
-          `${displayName} is not a previewable text file (${meta.mimetype ?? 'unknown type'}); download it from download_url.`,
-          meta,
-        );
-      }
+      mode = previewMode(entry.key, meta.mimetype);
+      if (mode === 'binary') return notPreviewable();
       read = await service.readContent(recid, entry.key, input.offset_bytes, input.max_bytes, ctx);
       if (read.status === 'range_not_satisfiable') {
         throw ctx.fail(
@@ -411,16 +433,22 @@ export const readFile = tool('zenodo_read_file', {
         meta,
       );
     }
+    if (mode === 'sniff' && !looksLikeText(read.bytes, input.offset_bytes === 0)) {
+      return withoutText(
+        'not_text',
+        `${displayName} has no file extension and its content is not UTF-8 text (${meta.mimetype ?? 'no MIME type'}); download it from download_url.`,
+        meta,
+      );
+    }
 
     const hasMore = read.moreRemains;
     const nextOffset = input.offset_bytes + cut.bytesKept;
     if (hasMore) {
       const end = nextOffset - 1;
-      const of = meta.size !== undefined ? meta.size : 'an unknown total';
       ctx.enrich.notice(
         member
-          ? `Showing bytes 0–${end} of ${of}; the rest of this member is past the preview cap, so download the archive from download_url.`
-          : `Showing bytes ${input.offset_bytes}–${end} of ${of}; call zenodo_read_file again with offset_bytes ${nextOffset}.`,
+          ? memberTruncationNotice(end, meta.size, input.max_bytes)
+          : `Showing bytes ${input.offset_bytes}–${end} of ${meta.size ?? 'an unknown total'}; call zenodo_read_file again with offset_bytes ${nextOffset}.`,
       );
     }
 

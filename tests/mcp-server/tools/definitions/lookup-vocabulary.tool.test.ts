@@ -8,6 +8,7 @@
  * @module tests/mcp-server/tools/definitions/lookup-vocabulary.tool.test
  */
 
+import { z } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
 import { JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
 import {
@@ -281,7 +282,7 @@ describe('zenodo_lookup_vocabulary — vocabularies', () => {
 });
 
 describe('zenodo_lookup_vocabulary — zero hits', () => {
-  it('routes a zero-hit query to shorter names and acronyms', async () => {
+  it('routes a zero-hit license query to a shorter keyword or browsing, not to acronyms', async () => {
     serve('/vocabularies/licenses', fixture('licenses-q-nomatch.json'));
     const { result, enrichment } = await call({ vocabulary: 'licenses', query: 'zzqqxxnomatch' });
     expect(result).toEqual({
@@ -299,8 +300,41 @@ describe('zenodo_lookup_vocabulary — zero hits', () => {
       cap: 10,
       totalCount: 0,
       notice:
-        'No licenses matched "zzqqxxnomatch"; try a shorter name, the acronym, or the funder\'s or project\'s acronym.',
+        'No licenses matched "zzqqxxnomatch"; try a shorter keyword such as cc-by, gpl, or mit, or call again without query to browse all licenses.',
     });
+  });
+
+  it('routes a zero-hit resource_types query to browsing the static list', async () => {
+    const { enrichment } = await call({ vocabulary: 'resource_types', query: 'code' });
+    expect(enrichment.notice).toBe(
+      'No resource_types matched "code"; every word must appear in a type id or label, so try a shorter keyword, or call again without query to list all 43 types.',
+    );
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['funders', '/funders', "try a shorter name or the funder's acronym."],
+    [
+      'awards',
+      '/awards',
+      "try the grant number, the project's acronym, or a shorter keyword from the award title.",
+    ],
+    [
+      'communities',
+      '/communities',
+      "try a shorter name, a keyword from the community's title, or the project's acronym.",
+    ],
+  ])('names acronyms only where they apply: %s', async (vocabulary, path, advice) => {
+    serve(path, { hits: { hits: [], total: 0 } });
+    const { enrichment } = await call({ vocabulary, query: 'zzqx' });
+    expect(enrichment.notice).toBe(`No ${vocabulary} matched "zzqx"; ${advice}`);
+  });
+
+  it('suggests dropping funder when a funder-scoped award query misses', async () => {
+    serve('/funders/00k4n6c32', { id: '00k4n6c32', name: 'European Commission' });
+    serve('/awards', { hits: { hits: [], total: 0 } });
+    const { enrichment } = await call({ vocabulary: 'awards', query: 'zzqx', funder: '00k4n6c32' });
+    expect(enrichment.notice).toMatch(/, or drop funder to search every funder’s grants\.$/);
   });
 
   it('flattens a line break in the echoed query', async () => {
@@ -476,11 +510,40 @@ describe('zenodo_lookup_vocabulary — runToolContract (production output + enri
     expect(tooBig.structuredContent).toMatchObject({
       error: { code: JsonRpcErrorCode.InvalidParams },
     });
-    const unknown = await runToolContract(lookupVocabulary, { vocabulary: 'grants' } as never);
+    const unknown = await runToolContract(lookupVocabulary, { vocabulary: 'datasets' } as never);
     expect(unknown.structuredContent).toMatchObject({
       error: { code: JsonRpcErrorCode.InvalidParams },
     });
+    expect((unknown.content[0] as { text: string }).text).toContain('resource_types');
     expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['Funders', 'funders'],
+    ['funder', 'funders'],
+    ['license', 'licenses'],
+    ['LICENSES', 'licenses'],
+    ['Community', 'communities'],
+    ['award', 'awards'],
+    ['grants', 'awards'],
+    ['resource-types', 'resource_types'],
+    ['resource types', 'resource_types'],
+    ['Resource Type', 'resource_types'],
+  ])('folds vocabulary %j to %s', (value, vocabulary) => {
+    expect(lookupVocabulary.input.parse({ vocabulary: value }).vocabulary).toBe(vocabulary);
+  });
+
+  it('keeps the advertised vocabulary enum canonical', () => {
+    const schema = z.toJSONSchema(lookupVocabulary.input) as {
+      properties: Record<string, { enum?: string[] }>;
+    };
+    expect(schema.properties.vocabulary?.enum).toEqual([
+      'communities',
+      'funders',
+      'awards',
+      'licenses',
+      'resource_types',
+    ]);
   });
 });
 

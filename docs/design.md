@@ -78,6 +78,8 @@ community: z.preprocess(blankToUndefined, z.string().max(200).optional())
 
 Normalizations a `.describe()` promises (trim, case, prefix stripping) run inside the same preprocess step, before any regex or enum check. Unresolvable values are rejected, never dropped.
 
+**Enum inputs** (`access_status`, `sort`, `citation_style`, `vocabulary`) go through `enumPreprocess(options, aliases)` (`src/mcp-server/tools/schema-helpers.ts`): a value whose case- and separator-folded form (lowercased, spaces, hyphens, and underscores removed) names exactly one option maps to it (`Metadata Only` → `metadata-only`, `MostViewed` → `mostviewed`, `BibTeX` → `bibtex`, `resource types` → `resource_types`), as does a listed one-to-one alias (`vocabulary`: the singulars `community`/`funder`/`award`/`license`/`resource_type`, and `grant`/`grants` → `awards`). Anything else passes through for the enum to reject with the valid options listed. The advertised JSON Schema keeps the canonical enum, and each `.describe()` states the folding.
+
 ### Identifier normalization (`id` on get_record, list_versions, list_files, read_file)
 
 A pure function `parseRecordRef(raw): RecordRef | ParseFailure` in `src/services/zenodo/identifiers.ts` classifies the input. It runs as a documented pre-validation step at the top of each handler. The schema is `z.string().trim().min(1).max(500)`, because `id` is required. Accepted forms, each verified on 2026-09-23:
@@ -90,7 +92,7 @@ A pure function `parseRecordRef(raw): RecordRef | ParseFailure` in `src/services
 | DOI URL | `https://doi.org/10.5281/zenodo.591564`, `http://dx.doi.org/…` | recid (Zenodo) or external DOI | |
 | Zenodo URL | `https://zenodo.org/records/22705923`, `…/record/22705923` (301), `…/records/N/files/…`, `…/api/records/N`, `https://zenodo.org/doi/10.5281/zenodo.591564` (302), `https://zenodo.org/badge/DOI/10.5281/zenodo.591564.svg` | recid | Query string and fragment ignored. **Never fetched**: URLs are parsed locally, and the server only requests `zenodo.org/api` paths it builds itself |
 | Other DOI | `10.3897/ap.e134190` | external DOI → `q=doi:"…"&all_versions=true` | Case-insensitive match verified. `all_versions=true` is mandatory: without it, a superseded version's DOI returns 0 hits (verified with `10.5281/zenodo.17880109`) |
-| Wrapping noise | `<10.5281/zenodo.1>`, `"…"`, surrounding whitespace, a trailing `.`/`,`/`;` after a recid or Zenodo DOI | stripped | Certain: recids end in a digit. For an external DOI, the as-given form is tried first; the stripped form is retried only on a miss |
+| Wrapping noise | `<10.5281/zenodo.1>`, `"…"`, surrounding whitespace, a trailing `.`/`,`/`;` after a recid or Zenodo DOI, and any nesting of the two (`<https://doi.org/10.5281/zenodo.1>.`, `"<…>",`, `<….>`) | stripped | Certain: recids end in a digit, and punctuation after a closing wrapper sits outside the value, so it is dropped with the wrapper for every form. Punctuation inside the wrapper follows the per-form rule: for an external DOI, the as-given form is tried first and the stripped form only on a miss |
 | **Rejected** `https://zenodo.org/badge/latestdoi/N` | — | `invalid_identifier` | `N` is a GitHub repository id, not a recid |
 | **Rejected** `sandbox.zenodo.org` URLs, other hosts | — | `invalid_identifier` | A different instance or not Zenodo |
 
@@ -132,26 +134,26 @@ The same holds for every other required enrichment key (`totalCount`, `appliedSo
 
 ### `zenodo_search_records`
 
-**Description (verbatim):** Search Zenodo's open research repository — datasets, software releases, publications, and other deposits — by keyword query plus filters for resource type, community, funder, grant, creator ORCID, file type, license, access status, and publication date. Returns one summary per deposit (ids, DOIs, title, type, version, creators, license, access, file totals, usage counts) plus facet counts over the full match set. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.
+**Description (verbatim):** Search Zenodo's open research repository — datasets, software releases, publications, and other deposits — by keyword query plus filters for resource type, community, funder, grant, creator ORCID, file type, license, access status, and publication date. Returns one summary per deposit (ids, DOIs, title, type, version, creators, license, access, file totals, usage counts) plus facet counts over the full match set, every filter applied. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.
 
 **Upstream:** `GET /api/records` with `Accept: application/vnd.inveniordm.v1+json`. Search bucket (30/min).
 
-**Allowlist.** Only these params are ever sent: `q`, `resource_type` (repeatable), `file_type` (repeatable), `access_status`, `communities`, `all_versions`, `sort`, `page`, `size`. Everything else composes into `q`. Unknown params are silently ignored upstream and return the whole corpus (`resourcetypo=`, `access_right=`, `bounds=` verified), so no caller-supplied key ever reaches the URL.
+**Allowlist.** Only these params are ever sent: `q`, `communities`, `all_versions`, `sort`, `page`, `size`. Everything else composes into `q`, including resource type, file type, and access status: Zenodo's own `resource_type` / `file_type` / `access_status` params are post-filters, applied after the aggregations are computed, so facet counts ignored them and contradicted `total` (Decision 35). Unknown params are silently ignored upstream and return the whole corpus (`resourcetypo=`, `access_right=`, `bounds=` verified), so no caller-supplied key ever reaches the URL.
 
 | Param | Type | Maps to | Notes |
 |:--|:--|:--|:--|
 | `query` | optional string ≤1000 (blank → unset, trimmed) | `q` (wrapped in parentheses when filters are also composed) | Default operator is OR (`climate model` 591,127 vs `climate AND model` 25,766). Pre-checks (below) reject a whole-identifier query and an unpaired `/`; the `.describe()` names the first so a caller routes a bare DOI to `zenodo_get_record` up front |
-| `resource_type` | optional array (1–10) of enum, a lone string accepted | `resource_type` repeated (OR) | Enum = the 43 ids of `/api/vocabularies/resourcetypes`, lowercased and trimmed in preprocess. A top-level id sends as-is (`dataset`). A subtype sends as `<type>::<id>` (`publication::publication-article`, `image::image-photo`, both verified). The bare subtype id returns 0 hits, which is why the static table (`resource-types.ts`) owns the mapping |
+| `resource_type` | optional array (1–10) of enum, a lone string accepted | `q += metadata.resource_type.props.type:"<id>"` for a top-level type (covers its subtypes: `image` 3,618 = the post-filter count), `metadata.resource_type.id:"<id>"` for a subtype; several OR-ed in parentheses | Enum = the 43 ids of `/api/vocabularies/resourcetypes` (static table `resource-types.ts`), lowercased and trimmed in preprocess. The `<type>::<id>` form `zenodo_lookup_vocabulary` prints as `search_value` (Zenodo's own spelling of a subtype) resolves to its id when the prefix is the subtype's parent. An unknown value raises a custom issue in the preprocess naming the value and the 43 ids, not the enum's issue: on a lone-string input that one points at array index 0, which the framework renders as `Missing required field` |
 | `community` | optional string ≤200 | `communities=<uuid>` | Slug, UUID, or `zenodo.org/communities/<slug>` URL. Validated with `GET /api/communities/{x}` before searching (unknown values are silently ignored upstream). A 404 is retried once lowercased when the lowercase form differs (slugs are case-sensitive: `SYMBAPROJECT` → 404). Still 404 → `unknown_community`. The canonical UUID is sent (slug and UUID both give 23 for `symbaproject`) |
 | `funder` | optional string ≤200 | `q += metadata.funding.funder.id:"<ror>"` | ROR id (`01cwqze88`), ROR URL (`https://ror.org/01cwqze88` → id), or Crossref Funder DOI (`10.13039/100000002`, bare or as a doi.org URL). A ROR id is validated with `GET /api/funders/{ror}`. A Funder DOI resolves through `/api/funders?q=identifiers.identifier:"<doi>"` (one-to-one: `10.13039/100000002` → `01cwqze88`). Unresolved → `unknown_funder`. Funder names are never auto-picked (a free-text "national institutes of health" ranks NIH Malaysia first) |
 | `award` | optional string ≤200 | `q += metadata.funding.award.id:"<ror>::<n>"` or `metadata.funding.award.number:"<n>"` | Accepts `<funder-ror>::<number>` (`00k4n6c32::101135562`), a bare grant number (`101135562`), or a CORDIS award DOI `10.3030/<n>` (→ `00k4n6c32::<n>`, the European Commission). An unknown award narrows to 0 hits, never widens, so it is not pre-validated; the zero-hit notice routes to lookup |
 | `creator_orcid` | optional string | `q += metadata.creators.person_or_org.identifiers.identifier:"<orcid>"` | Preprocess strips `https://orcid.org/` and uppercases a trailing `x` (lowercase `x` gives 0 hits upstream). Schema regex `^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$` plus an ISO 7064 mod 11-2 checksum refine. Example: `0000-0002-1825-0097` (ORCID's public test identity) |
-| `file_type` | optional array (1–10) of string, a lone string accepted | `file_type` repeated (OR) | Preprocess lowercases each value and strips a leading `.` (`CSV` gives 0 hits upstream, `csv` filters). Regex `^[a-z0-9]{1,16}$` |
+| `file_type` | optional array (1–10) of string, a lone string accepted | `q += files.types:"<ext>"`, several OR-ed in parentheses | Preprocess lowercases each value and strips a leading `.` (`CSV` gives 0 hits upstream, `csv` filters). Regex `^[a-z0-9]{1,16}$` |
 | `license` | optional string | `q += metadata.rights.id:"<id>"` | Preprocess lowercases (all 444 license ids are lowercase; `MIT` gives 0 hits, `mit` gives 71,422). Regex `^[a-z0-9][a-z0-9.+-]{0,63}$` |
-| `access_status` | optional enum `open \| restricted \| embargoed \| metadata-only` | `access_status` | `metadata-only` verified valid (2 records) |
+| `access_status` | optional enum `open \| restricted \| embargoed \| metadata-only` | `q += access.status:"<status>"` | `metadata-only` verified valid (2 records). Case and separators fold ([Enum inputs](#blank-optional-inputs)) |
 | `published_from` / `published_to` | optional string | `q += metadata.publication_date:[<from> TO <to>]` (`*` for an open side) | Schema: regex `^\d{4}(-(0[1-9]\|1[0-2])(-(0[1-9]\|[12]\d\|3[01]))?)?$` plus a refine that rejects impossible calendar dates (`2023-02-30`). Pre-validation expands partial dates: `from` `YYYY` → `YYYY-01-01`, `YYYY-MM` → first day. `to` `YYYY` → `YYYY-12-31`, `YYYY-MM` → last day. The expansion is required because upstream compares partial dates as instants: `[2020 TO 2020]` matched 571 where the full-year range matched 22,424. `from > to` → `invalid_date_range` |
 | `all_versions` | boolean, default `false` | `all_versions=true` when set | Echoed in enrichment |
-| `sort` | optional enum `bestmatch \| newest \| oldest \| mostviewed \| mostdownloaded \| updated-desc \| updated-asc` | `sort` | Default: `bestmatch` when `query` is set, `newest` otherwise. The applied value is echoed. Unknown sorts are a 400 upstream, so the schema enum prevents them |
+| `sort` | optional enum `bestmatch \| newest \| oldest \| mostviewed \| mostdownloaded \| updated-desc \| updated-asc` | `sort` | Default: `bestmatch` when `query` is set, `newest` otherwise. The applied value is echoed. Unknown sorts are a 400 upstream, so the schema enum prevents them. Case and separators fold (`MostViewed`, `updated_desc`) |
 | `page` | int ≥1, default 1 | `page` | `page × size > 10000` → `result_window_exceeded` before any upstream call |
 | `size` | int 1–25, default 10 | `size` | Capped at 25 whether or not a token is configured (see Decisions Log) |
 
@@ -170,7 +172,7 @@ The same holds for every other required enrichment key (`totalCount`, `appliedSo
 | `has_more` | boolean | `page × size < reachable` |
 | `next_page` | number, optional | Present when `has_more` |
 | `hits[]` | array of summary | See below |
-| `facets` | object | Counts over the full match set, from upstream `aggregations` |
+| `facets` | object | Counts over the full match set with every filter applied (they agree with `total`), from upstream `aggregations`. Rendered under `### Facets (full match set, every filter applied)` |
 | `facets.resource_type[]` | `{ id, label, count, subtypes?: {id,label,count}[] }` | Top 10 types, top 5 subtypes each. Ids feed `resource_type` directly |
 | `facets.access_status[]` | `{ id, label, count }` | All buckets |
 | `facets.file_type[]` | `{ id, label, count }` | Top 10 |
@@ -251,7 +253,7 @@ Hit summary (all from the RDM search hit; file `entries` are stripped because se
 | Param | Type | Notes |
 |:--|:--|:--|
 | `id` | string (required, trimmed, 1–500) | Any form in [Identifier normalization](#identifier-normalization-id-on-get_record-list_versions-list_files-read_file). Example: `10.5281/zenodo.591564` (scikit-learn concept DOI) |
-| `citation_style` | optional enum `bibtex \| csl-json \| apa \| chicago-author-date \| harvard-cite-them-right \| ieee \| modern-language-association \| nature` | Blank → unset. `vancouver` and `chicago-fullnote-bibliography` return 400 upstream and are excluded |
+| `citation_style` | optional enum `bibtex \| csl-json \| apa \| chicago-author-date \| harvard-cite-them-right \| ieee \| modern-language-association \| nature` | Blank → unset. Case and separators fold (`BibTeX`, `APA`, `CSL JSON`). `vancouver` and `chicago-fullnote-bibliography` return 400 upstream and are excluded |
 
 **Output** (flat):
 
@@ -331,7 +333,7 @@ Hit summary (all from the RDM search hit; file `entries` are stripped because se
 | Param | Type | Notes |
 |:--|:--|:--|
 | `id` | string (required) | As `zenodo_get_record` |
-| `page` | int ≥1, default 1 | A page past the end returns 200 with 0 hits upstream (verified) → a notice |
+| `page` | int ≥1, default 1 | A page past the end returns 200 with 0 hits upstream (verified) → a notice. `page × size > 10000` → `result_window_exceeded` before any upstream call: Zenodo answers it with HTTP 400 `Invalid querystring parameters.` (`591564` `page=401&size=25`, verified), and no series approaches 10,000 versions |
 | `size` | int 1–25, default 25 | `size=26` → 400 upstream |
 
 **Output:** `found`, `guidance?`, `miss_kind?`, `tombstone?`, `input_kind`, `concept_recid?`, `concept_doi?`, `total_versions?`, `latest_recid?`, `page`, `size`, `has_more`, `next_page?`, `versions[]` (empty when not found): `{ recid, title, doi?, version?, publication_date?, index?, is_latest?, file_count?, total_bytes?, views?, downloads? }` (`stats.this_version.unique_views/unique_downloads`). Series fields are optional because a miss has no series; `concept_recid`/`concept_doi` come from the first hit's `parent` (falling back to the record GET when the page had to be classified), so a page past the end carries neither.
@@ -347,6 +349,7 @@ Hit summary (all from the RDM search hit; file `entries` are stripped because se
 | reason | code | when | recovery (verbatim) |
 |:--|:--|:--|:--|
 | `upstream_timeout` | `Timeout` (`retryable: false`, `thrownBy: 'service'`) | The `/versions` page got no complete response within its time budget (version hits embed each version's full manifest). Not retried | Call zenodo_list_versions again with a smaller size (5); this series holds large file manifests. |
+| `result_window_exceeded` | `ValidationError` | `page × size > 10000` | Zenodo pages only the first 10,000 versions of a series, and no series comes near that; call zenodo_list_versions with page 1 (total_versions and has_more show how far the series goes). |
 
 ---
 
@@ -375,14 +378,14 @@ Hit summary (all from the RDM search hit; file `entries` are stripped because se
 | `key_contains?`, `offset`, `limit`, `matched`, `has_more`, `next_offset?` | | both |
 | `file_count?`, `total_bytes?` | number | manifest |
 | `entries[]` | `{ key, size, mimetype, md5, download_url, previewable, listable }` | manifest (`listable` = ZIP) |
-| `archive` | `{ key, size, listed_members, upstream_truncated, directory_count }` | archive |
+| `archive` | `{ key, size, download_url, listed_members, upstream_truncated, directory_count }` | archive (`download_url` is the `.zip`'s own, which the truncation notice points to) |
 | `members[]` | `{ path, size, compressed_size, mimetype, previewable }` | archive |
 
 `upstream_truncated` semantics (settled 2026-09-23): the container listing caps at **1,000 nodes, counting files and directories together**. The scikit-learn 1.9.1 ZIP listed 857 files + 143 directories = 1,000 with `truncated: true`, and small ZIPs (6 and 3 members) returned `truncated: false`. `total` counts listed files only, so when `upstream_truncated` is true the archive holds more members than Zenodo will list. Upstream shape: `{ entries[], directories[], total, truncated }`; an entry is `{ key, size, compressed_size, mimetype, crc, links }` and `directory_count` is `directories.length`. `entries[].key` is the member path.
 
 `md5` on manifest entries is upstream `checksum` (`md5:<hex>`) with the prefix stripped.
 
-`previewable` is the same predicate `zenodo_read_file` applies ([Preview rules](#preview-rules)).
+`previewable` is true when `zenodo_read_file` reads the file rather than refusing it unread: preview mode `text` or `sniff` ([Preview rules](#preview-rules)). A sniffed file is still returned as `not_text` when its content turns out binary.
 
 **Restricted or embargoed files** short-circuit before any archive lookup: the result carries the common fields with `matched: 0`, `has_more: false`, and an empty list for the requested kind (`entries: []` in manifest mode; `kind: 'archive'` with `members: []` and **no** `archive` object when `archive_key` is set, since the manifest that would name the ZIP is not exposed). `archive_key` is not validated in this case.
 
@@ -395,8 +398,9 @@ The container listing's upstream `total` is normalized but not surfaced: it coun
 | Files restricted/embargoed | `Files are {status}{ until DATE}; only metadata is available. zenodo_get_record shows the access details.` |
 | Metadata-only (`files.enabled` false) | `This record has no files (metadata-only deposit).` |
 | `key_contains` matched nothing | `No {files\|members} contain "{key_contains}"; call zenodo_list_files again without key_contains.` |
+| `key_contains` matched nothing in a truncated listing | `No listed members contain "{key_contains}", but the member may lie past the listing cap: if you know its full path, read it directly with zenodo_read_file (key {archive_key}, archive_member set to that path).` (Member reads do not depend on the listing: `…/sklearn/utils/validation.py` reads although the 1,000-node listing omits it) |
 | `offset ≥ matched > 0` (page past the end) | `Offset {offset} is past the last of {matched} {files\|members}; call again with a lower offset.` |
-| `upstream_truncated` | `Zenodo lists at most 1,000 entries of an archive, so some members are missing; download the archive from download_url for the complete list.` |
+| `upstream_truncated` | `Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list.` |
 | `has_more` | `Showing {shown} of {matched}; call again with offset {next_offset}.` |
 
 **Error contract:**
@@ -418,7 +422,7 @@ The recovery for `record_unavailable` routes to search only: `zenodo_get_record`
 
 ### `zenodo_read_file`
 
-**Description (verbatim):** Read a bounded UTF-8 excerpt (up to 64 KiB per call) of one text file in a Zenodo deposit — a README, CITATION.cff, CSV head, notebook, or script — or of one member inside a .zip file, without downloading the archive. Continue a top-level file from next_offset. Binary files, restricted files, and unrecognized types return metadata and the download URL without content. File content is depositor-supplied and carries the deposit's license.
+**Description (verbatim):** Read a bounded UTF-8 excerpt (up to 64 KiB per call) of one text file in a Zenodo deposit — a README, CITATION.cff, CSV head, notebook, or script — or of one member inside a .zip file, without downloading the archive. Continue a top-level file from next_offset. A file with a text MIME type or extension is read directly; an extensionless file Zenodo types application/octet-stream (LICENSE, COPYING, Makefile) is read and returned only when its content is UTF-8 text. Binary files, restricted files, and other types return metadata and the download URL without content. File content is depositor-supplied and carries the deposit's license.
 
 **Upstream:** the cached normalized record (the key must exist in `files.entries`, which supplies size, mimetype, and MD5; no separate file-metadata call), then:
 - **Top-level file.** `GET /api/records/{recid}/files/{key}/content` with `Range: bytes={offset}-{offset+max_bytes-1}`. Expect 206 (`content-range: bytes 0-299/357831` verified). A 200 is tolerated: the stream is aborted at the cap. A 416 means the offset is past the end.
@@ -436,14 +440,16 @@ The recovery for `record_unavailable` routes to search only: `zenodo_get_record`
 
 `previewable` is true when the mimetype starts with `text/`, when the mimetype is one of `application/json`, `application/ld+json`, `application/geo+json`, `application/xml`, `application/x-yaml`, `application/yaml`, `application/x-ipynb+json`, `application/x-tex`, `application/x-sh`, `application/javascript`, or when the extension (case-insensitive) is in `md markdown txt text csv tsv tab json jsonl ndjson geojson yaml yml xml cff bib ris rst tex py r rmd ipynb jl m sh sql toml ini cfg conf log html htm js ts c h cpp java go rs do sas`. The extension list is needed because CITATION.cff arrives as `application/octet-stream`. After the fetch, a NUL byte in the buffer turns the result into `not_text` regardless.
 
+`previewMode(key, mimetype)` (`text-preview.ts`) sorts every file or member before any content request: `text` when `previewable` holds; `sniff` when the last path segment has no extension and the mimetype is `application/octet-stream` or absent (LICENSE, COPYING, Makefile, Dockerfile, README, dotfiles; record 12732587's `LICENSE` is the 35,149-byte GPLv3 typed `application/octet-stream`); `binary` otherwise, refused unread as before (a known binary or unlisted extension such as `.bin`, `.gz`, `.dat` keeps the pre-fetch shortcut). A `sniff` file takes the normal window read, the same single request a text file takes, and is returned only when the window holds no NUL byte and its first 4,096 bytes decode as strict UTF-8 (`looksLikeText`; a character cut at either edge of the head is allowed). Otherwise it is `not_text`.
+
 **Byte cut.** Decode the returned bytes as UTF-8 (`fatal: false`). When more bytes remain past this window, cut at the last `\n` in the buffer. If the buffer holds no newline, cut at the last complete UTF-8 sequence. `bytes_returned` is the exact byte length kept, and `next_offset = offset_bytes + bytes_returned`, so continuation windows land on line or character boundaries. A caller-chosen mid-character offset decodes with U+FFFD, counted in `replacement_chars`.
 
 **Order of checks** (after the record resolves):
 
 1. **Restricted before key.** When `files.enabled` and `access.files` is `restricted`, the result is `status: 'restricted'` immediately. The key is not checked: a restricted record exposes no manifest, so a key lookup would misreport every key as `file_not_found`.
 2. `key` not in the manifest → `file_not_found` (a metadata-only record says so in the message).
-3. **Pre-fetch shortcuts**, no content request made: a known size of 0 → `status: 'empty'` (`offset_bytes > 0` on it → `offset_out_of_range`); a known size with `offset_bytes ≥ size` → `offset_out_of_range`; a file or member failing the preview predicate → `status: 'not_text'`. For a ZIP member, `not_an_archive` and `member_offset_unsupported` are checked first, then the container listing supplies the member's size and mimetype for the same shortcuts.
-4. The content read; a NUL byte in the window still turns the result into `not_text`, a 403 on the content endpoint into `restricted` (with a notice naming the per-file refusal, since the record's files are open at this point), and zero bytes at a positive `offset_bytes` (a Range-ignoring 200 that ended before the offset, on a file of unknown size) into `offset_out_of_range` rather than `empty`.
+3. **Pre-fetch shortcuts**, no content request made: a known size of 0 → `status: 'empty'` (`offset_bytes > 0` on it → `offset_out_of_range`); a known size with `offset_bytes ≥ size` → `offset_out_of_range`; a file or member in preview mode `binary` → `status: 'not_text'`. For a ZIP member, `not_an_archive` and `member_offset_unsupported` are checked first, then the container listing supplies the member's size and mimetype for the same shortcuts.
+4. The content read; a NUL byte in the window, or (in `sniff` mode) a head that is not valid UTF-8, turns the result into `not_text`, a 403 on the content endpoint into `restricted` (with a notice naming the per-file refusal, since the record's files are open at this point), and zero bytes at a positive `offset_bytes` (a Range-ignoring 200 that ended before the offset, on a file of unknown size) into `offset_out_of_range` rather than `empty`.
 
 **Output:** `recid`, `key`, `archive_member?`, `status` (`'text' | 'not_text' | 'restricted' | 'empty'`), `mimetype?`, `file_size?`, `md5?` (top-level files only), `text?`, `offset_bytes`, `bytes_returned`, `next_offset?` (top-level files only; a ZIP member reports `has_more` with no `next_offset`), `has_more`, `replacement_chars`, `rights[]` (`{ id?, title }` of the record), `record_url`, `download_url` (the `.zip` itself for a member), `files_access?` (absent when upstream omits `access.files`).
 
@@ -452,10 +458,12 @@ The recovery for `record_unavailable` routes to search only: `zenodo_get_record`
 | status / condition | Notice |
 |:--|:--|
 | `not_text` | `{key} is not a previewable text file ({mimetype}); download it from download_url.` |
+| `not_text` (a `sniff` file whose head is not UTF-8) | `{key} has no file extension and its content is not UTF-8 text ({mimetype}); download it from download_url.` |
 | `restricted` (the record's files are restricted or embargoed) | `Files are {status}{ until DATE}; content is not available anonymously.` |
 | `restricted` (the content endpoint answered 403 on a record whose files are open) | `Zenodo refused anonymous access to {key} (HTTP 403) although the record's files are {files_access}; its content cannot be previewed here. zenodo_get_record shows the record's access details.` |
 | `empty` | `{key} is empty.` |
-| `has_more` | `Showing bytes {offset}–{end} of {file_size}; call zenodo_read_file again with offset_bytes {next_offset}.` (For a ZIP member: `…of {size}; the rest of this member is past the preview cap, so download the archive from download_url.`) |
+| `has_more` | `Showing bytes {offset}–{end} of {file_size}; call zenodo_read_file again with offset_bytes {next_offset}.` |
+| `has_more`, ZIP member (no offset reads, so the next step is one larger read when that covers the member) | Size known and ≤ 65,536: `Showing bytes 0–{end} of {size}; call zenodo_read_file again with max_bytes {size} to read the whole member.` Size unknown and `max_bytes` < 65,536: `…of an unknown total; call zenodo_read_file again with max_bytes 65536 to read more of this member, and download the archive from download_url if that still stops short.` Otherwise: `…; the member is larger than the 65536-byte read cap, so download the archive from download_url for the rest` plus ` (max_bytes 65536 shows more of its start)` when `max_bytes` < 65,536 |
 
 `format()` renders `text` inside the untrusted-content fence ([Untrusted text](#untrusted-text-and-html)) with the license line `License: {rights titles} — record {record_url}`.
 
@@ -499,7 +507,7 @@ Reference tool. It is the routing target for every unknown-value and zero-hit pa
 
 | Param | Type | Notes |
 |:--|:--|:--|
-| `vocabulary` | enum `communities \| funders \| awards \| licenses \| resource_types` (required) | |
+| `vocabulary` | enum `communities \| funders \| awards \| licenses \| resource_types` (required) | Case and separators fold, and the singulars plus `grant`/`grants` (→ `awards`) are accepted ([Enum inputs](#blank-optional-inputs)): `Funders`, `license`, `resource types`, `resource-types` |
 | `query` | optional string ≤200 | Name, acronym, or keyword. Omitted → browse. For `resource_types` every word must appear in the type id or label |
 | `funder` | optional string | awards only. ROR id, ROR URL, or Crossref Funder DOI (resolved as in search) |
 | `page` | int ≥1, default 1 | |
@@ -514,9 +522,9 @@ Reference tool. It is the routing target for every unknown-value and zero-hit pa
 | `ror_id`, `funder_doi` (`identifiers[scheme=doi]`), `acronym` (often `null` upstream → omitted), `country` | funders |
 | `number`, `acronym`, `title`, `program`, `funder_id`, `funder_name`, `award_doi`, `award_url`, `start_date`, `end_date` | awards |
 | `url`, `osi_approved`, `tags[]` | licenses |
-| `parent_type`, `search_value` (`type::id` form, informational) | resource_types |
+| `parent_type`, `search_value` (`type::id` form; `zenodo_search_records` accepts it or `filter_value` as `resource_type`) | resource_types |
 
-**Enrichment:** `truncated`/`shown`/`cap` (unconditional), `totalCount`, `notice`: zero hits → `No {vocabulary} matched "{query}"; try a shorter name, the acronym, or the funder's or project's acronym.`; funders with several entries → `Several funders share names across countries; pick by country and ROR id.`; `has_more` → `Showing {shown} of {total}; call again with page {page+1}.`
+**Enrichment:** `truncated`/`shown`/`cap` (unconditional), `totalCount`, `notice`: zero hits → `No {vocabulary} matched "{query}"; {advice}.`, where the advice names acronyms only for the vocabularies that carry them — communities: `try a shorter name, a keyword from the community's title, or the project's acronym`; funders: `try a shorter name or the funder's acronym`; awards: `try the grant number, the project's acronym, or a shorter keyword from the award title` (plus `, or drop funder to search every funder's grants` when `funder` scoped the call); licenses: `try a shorter keyword such as cc-by, gpl, or mit, or call again without query to browse all licenses`; resource_types: `every word must appear in a type id or label, so try a shorter keyword, or call again without query to list all 43 types`; funders with several entries → `Several funders share names across countries; pick by country and ROR id.`; `has_more` → `Showing {shown} of {total}; call again with page {page+1}.`
 
 **Error contract:**
 
@@ -692,7 +700,7 @@ Keyless probes against `https://zenodo.org/api`, spaced in small batches, well u
 | Probe | Result | Design consequence |
 |:--|:--|:--|
 | `GET /records?q=climate&size=2` (RDM) | 200. Keys `hits, aggregations, links{self,next}, sortBy`. Aggregations `publication_date, access_status, resource_type` (nested `inner` subtypes), `subject, file_type`. Hits carry `files.entries` as an **object keyed by filename**. Headers `x-ratelimit-limit: 30`, `x-ratelimit-remaining`, `x-ratelimit-reset` (epoch s), `retry-after` on a 200 | Strip entries; facets from aggregations; header gate |
-| `resource_type=image::image-photo` / `image-photo` / `publication::publication-article` | 364,490 / 0 / 2,492,353 | `<type>::<id>` rule for all subtypes; static table |
+| `resource_type=image::image-photo` / `image-photo` / `publication::publication-article` | 364,490 / 0 / 2,492,353 | The `resource_type` param needs `<type>::<id>` for a subtype; static table. Superseded as the filter path by the `q` clauses below (Decision 35) |
 | `access_status=metadata-only`, `=embargoed`, `=restricted` | 2 / 376 / 7,156 (climate) | Enum of four. Restricted and embargoed hits carry `files: {enabled:true}` only |
 | `/records/22931068/files` (restricted), `/records/22837418/files` (embargoed until 2035-08-31) | 403 `{"status":403,"message":"Permission denied."}` | Access status comes from the record, not a 403 |
 | `/records/7126368/files` (metadata-only) | 200 `{"enabled": false, …}` | `files_enabled: false` path |
@@ -738,6 +746,8 @@ Keyless probes against `https://zenodo.org/api`, spaced in small batches, well u
 | `metadata.rights.id:"MIT"` vs `"mit"`; ORCID with a lowercase `x` | 0 vs 71,422; 0 | Case normalizations |
 | `GET /records/14642998` (4,018 files) | 200, 1,840,158 B, 14.0 s, **all 4,018 entries embedded** | Manifest from the record GET; cache (attempt budget set by the 32–34 s rows above) |
 | `…/22917909/files/Metadaten.zip/container`; member `…/container/citation.bib`; `…/content` (2026-09-24) | **500** (JSON `error_id` body) on both, repeatably; content 200, 21,534 B, a 13-entry deflate ZIP that `unzip -l` lists | `archive_unavailable` with the download URL in the message |
+| (2026-09-24) `q=air quality&resource_type=dataset&file_type=csv` vs `q=(air quality) AND metadata.resource_type.props.type:"dataset" AND files.types:"csv"` | Both 5,348 hits. Params: facets unfiltered (`publication` 202,111, `pdf` 192,417, `open` 242,152; even the year buckets ignore the filters). `q`: facets agree (`dataset` 5,348, `csv` 5,348) | Post-filter params contradict `total`; compose into `q` (Decision 35) |
+| (2026-09-24) `q=climate` with `resource_type=publication::publication-article` / `image` / `access_status=restricted` / `dataset`+`software` & `csv`+`zip`; browse `access_status=metadata-only` — each vs the `q` clause (`metadata.resource_type.id:"publication-article"`, `metadata.resource_type.props.type:"image"`, `access.status:"restricted"`, OR-groups, `access.status:"metadata-only"`) | 40,624 / 3,618 / 7,166 / 17,361 / 2 — identical totals pairwise; only the `q` form narrows the facets | `props.type` covers a top-level type's subtypes; `metadata.resource_type.id` takes a subtype's bare id |
 
 **Still unverified:** the 429 response body (limits were approached, never exceeded; handling keys off the status and headers, not the body); the anonymous GET of a record whose *metadata* is restricted (`access.record = restricted` never appears in anonymous search, and none of the 41 sampled recids returned 403; 403 is handled as `found: false` / `record_not_found`); the effective limits with a token (search limit especially); a tombstone with `is_visible: false` (assumed to omit `citation_text`, which is optional in the output).
 
@@ -779,3 +789,6 @@ Keyless probes against `https://zenodo.org/api`, spaced in small batches, well u
 | 32 | `archive_unavailable` on `zenodo_list_files` and `zenodo_read_file` for a `/container` or member-read 500 (after one retry) or timeout, naming the download URL in the message | Some ordinary ZIPs 500 deterministically (22917909 `Metadaten.zip`); an untyped `ServiceUnavailable` gave the agent no path, and downloading the archive always works. The URL goes in the message because `content[]`-only clients never see `error.data` |
 | 33 | `versions/latest` failures stay untyped | The record already resolved when it runs, so `record_unavailable` ("could not serve this record", recovery via search) would misdescribe a failed latest-version pointer |
 | 34 | External-DOI resolutions cached as `doi/{doi}` → recid | Without it every drill-down on an external DOI (`list_files` then `read_file`) re-spends the 25/min search budget that all callers share |
+| 35 | Resource type, file type, and access status compose into `q` (`metadata.resource_type.props.type` / `.id`, `files.types`, `access.status`) instead of riding Zenodo's `resource_type` / `file_type` / `access_status` params | Those params are post-filters: the aggregations ignored them, so facet counts contradicted `total` (`csv 359` beside `total 334`). The `q` clauses give identical totals (verified on six filter combinations) and facets that agree with them; the cost is that a filtered facet shows only the values the filter allows, which is what "counts over the full match set" means |
+| 36 | `zenodo_read_file` reads extensionless `application/octet-stream` (or untyped) files and returns them only when the window has no NUL byte and its head is strict UTF-8; other octet-stream files stay refused unread | Zenodo types LICENSE, COPYING, Makefile, and Dockerfile as `application/octet-stream`, so they came back `not_text` unread, and they are what an agent most often needs in a software deposit. Sniffing covers project-specific names a filename list would miss; a binary costs one bounded window read, the same single request a text file takes |
+| 37 | Enum inputs fold case and separators and accept a few one-to-one aliases before the enum check; the advertised JSON Schema enum stays canonical | Each folded value (`Open`, `metadata only`, `BibTeX`, `Funders`, `license`) means exactly one option, so rejecting it cost a round trip for nothing; the canonical enum is what form dropdowns and model grounding read. Values that are not one-to-one (`relevance` for `bestmatch`) are still rejected |

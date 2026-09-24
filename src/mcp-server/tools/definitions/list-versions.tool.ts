@@ -12,6 +12,9 @@ import type { Tombstone, VersionsLookup } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 import { inline, quoteBlock } from '../render.js';
 
+/** Zenodo answers HTTP 400 when page × size passes this window. */
+const RESULT_WINDOW = 10_000;
+
 const TombstoneSchema = z
   .object({
     removal_date: z.string().optional().describe('When the record was removed (ISO 8601).'),
@@ -45,7 +48,12 @@ export const listVersions = tool('zenodo_list_versions', {
       .describe(
         'Any version or concept identifier of the deposit: a record id (22705923), a Zenodo DOI (10.5281/zenodo.22705923) or concept DOI (10.5281/zenodo.591564), another DOI registered to a Zenodo record, or a zenodo.org/records or doi.org URL.',
       ),
-    page: z.number().int().min(1).default(1).describe('Result page, starting at 1.'),
+    page: z
+      .number()
+      .int()
+      .min(1)
+      .default(1)
+      .describe('Result page, starting at 1. page × size may not exceed 10,000.'),
     size: z.number().int().min(1).max(25).default(25).describe('Versions per page (1–25).'),
   }),
   output: z.object({
@@ -151,6 +159,13 @@ export const listVersions = tool('zenodo_list_versions', {
         'Pass a Zenodo record id (22705923), a DOI (10.5281/zenodo.22705923), or a zenodo.org/records URL as id; for a title or keyword, use zenodo_search_records.',
     },
     {
+      reason: 'result_window_exceeded',
+      code: JsonRpcErrorCode.ValidationError,
+      when: 'page × size exceeds 10,000',
+      recovery:
+        'Zenodo pages only the first 10,000 versions of a series, and no series comes near that; call zenodo_list_versions with page 1 (total_versions and has_more show how far the series goes).',
+    },
+    {
       reason: 'record_unavailable',
       code: JsonRpcErrorCode.ServiceUnavailable,
       when: 'Zenodo could not serve this record or its versions page: HTTP 500 after one retry, HTTP 500 while resolving a non-Zenodo DOI, or no complete record response within the time budget (its gateway cuts off near 30 s, which deposits with about 10,000 or more files hit)',
@@ -180,6 +195,14 @@ export const listVersions = tool('zenodo_list_versions', {
 
   async handler(input, ctx) {
     ctx.enrich({ truncated: false, shown: 0, cap: input.size, totalCount: 0 });
+
+    if (input.page * input.size > RESULT_WINDOW) {
+      throw ctx.fail(
+        'result_window_exceeded',
+        `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} versions Zenodo pages through.`,
+        { ...ctx.recoveryFor('result_window_exceeded') },
+      );
+    }
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {

@@ -270,6 +270,24 @@ describe('zenodo_list_files — manifest', () => {
       ['AP_article_134190.xml', true],
     ]);
   });
+
+  it('flags extensionless octet-stream files as read-and-checked, with the zenodo_read_file predicate', async () => {
+    serveRecord('22705923', () =>
+      withEntries(recordFixture(), [
+        { key: 'LICENSE', size: 35_149, mimetype: 'application/octet-stream' },
+        { key: 'src/Makefile', size: 900 },
+        { key: 'model.bin', size: 900, mimetype: 'application/octet-stream' },
+        { key: 'COPYING', size: 900, mimetype: 'image/png' },
+      ]),
+    );
+    const { result } = await call({ id: '22705923' });
+    expect(result.entries?.map((e) => [e.key, e.previewable])).toEqual([
+      ['LICENSE', true],
+      ['src/Makefile', true],
+      ['model.bin', false],
+      ['COPYING', false],
+    ]);
+  });
 });
 
 describe('zenodo_list_files — restricted, embargoed, and metadata-only records', () => {
@@ -382,6 +400,8 @@ describe('zenodo_list_files — archive members', () => {
       archive: {
         key: 'monthly_shapes_0_20.zip',
         size: 75_596,
+        download_url:
+          'https://zenodo.org/api/records/7614815/files/monthly_shapes_0_20.zip/content',
         listed_members: 7,
         upstream_truncated: false,
         directory_count: 1,
@@ -415,6 +435,8 @@ describe('zenodo_list_files — archive members', () => {
       archive: {
         key: SKLEARN_ZIP,
         size: 8_684_206,
+        download_url:
+          'https://zenodo.org/api/records/22705923/files/scikit-learn/scikit-learn-1.9.1.zip/content',
         listed_members: 857,
         upstream_truncated: true,
         directory_count: 143,
@@ -431,8 +453,33 @@ describe('zenodo_list_files — archive members', () => {
       cap: 50,
       totalCount: 857,
       notice:
-        'Zenodo lists at most 1,000 entries of an archive, so some members are missing; download the archive from download_url for the complete list. Showing 50 of 857; call again with offset 50.',
+        'Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list. Showing 50 of 857; call again with offset 50.',
     });
+    expect(textOf(result)).toContain(
+      'upstream truncated: true — https://zenodo.org/api/records/22705923/files/scikit-learn/scikit-learn-1.9.1.zip/content',
+    );
+  });
+
+  it('routes a filter miss in a truncated listing to a direct member read', async () => {
+    serveRecord('22705923', recordFixture);
+    serveContainer(
+      '/records/22705923/files/scikit-learn/scikit-learn-1.9.1.zip',
+      containerBody(857, 143),
+    );
+    const { result, enrichment } = await call({
+      id: '22705923',
+      archive_key: SKLEARN_ZIP,
+      key_contains: 'sklearn/utils/',
+    });
+    expect(result).toMatchObject({
+      matched: 0,
+      members: [],
+      archive: { upstream_truncated: true },
+    });
+    expect(enrichment.notice).toBe(
+      `Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list. No listed members contain "sklearn/utils/", but the member may lie past the listing cap: if you know its full path, read it directly with zenodo_read_file (key ${SKLEARN_ZIP}, archive_member set to that path).`,
+    );
+    expect(enrichment.notice).not.toContain('without key_contains');
   });
 
   it('notes the 1,000-node cut on the last page too', async () => {
@@ -451,7 +498,7 @@ describe('zenodo_list_files — archive members', () => {
     expect(enrichment).toMatchObject({
       truncated: false,
       notice:
-        'Zenodo lists at most 1,000 entries of an archive, so some members are missing; download the archive from download_url for the complete list.',
+        'Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list.',
     });
   });
 

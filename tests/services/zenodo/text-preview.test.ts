@@ -1,7 +1,8 @@
 /**
- * @fileoverview Tests for file-preview rules: the previewable predicate, ZIP
- * detection, fence language hints, and the byte cut (newline boundary, UTF-8
- * boundary, BOM at offset 0, NUL → binary, replacement-character counting).
+ * @fileoverview Tests for file-preview rules: the previewable predicate, the
+ * read-and-sniff mode for extensionless octet-stream files, ZIP detection, fence
+ * language hints, and the byte cut (newline boundary, UTF-8 boundary, BOM at
+ * offset 0, NUL → binary, replacement-character counting).
  * @module tests/services/zenodo/text-preview.test
  */
 
@@ -12,11 +13,57 @@ import {
   isPreviewable,
   isZip,
   languageHint,
+  looksLikeText,
+  previewMode,
 } from '@/services/zenodo/text-preview.js';
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const bytes = (...parts: (string | number[])[]) =>
   Uint8Array.from(parts.flatMap((p) => (typeof p === 'string' ? [...utf8(p)] : p)));
+
+describe('previewMode', () => {
+  it.each([
+    ['README.md', 'text/markdown', 'text'],
+    ['CITATION.cff', 'application/octet-stream', 'text'],
+    ['LICENSE', 'application/octet-stream', 'sniff'],
+    ['COPYING', 'Application/Octet-Stream; charset=binary', 'sniff'],
+    ['src/Makefile', undefined, 'sniff'],
+    ['Dockerfile', '', 'sniff'],
+    ['.gitignore', 'application/octet-stream', 'sniff'],
+    ['LICENSE', 'image/png', 'binary'],
+    ['model.bin', 'application/octet-stream', 'binary'],
+    ['archive.tar.gz', 'application/octet-stream', 'binary'],
+    ['data.parquet', undefined, 'binary'],
+  ] as const)('%s (%s) → %s', (key, mime, mode) => {
+    expect(previewMode(key, mime)).toBe(mode);
+  });
+});
+
+describe('looksLikeText', () => {
+  it('accepts ASCII and multibyte UTF-8', () => {
+    expect(looksLikeText(utf8('GNU GENERAL PUBLIC LICENSE\n'), true)).toBe(true);
+    expect(looksLikeText(utf8('Copyright © 2026 — “quoted”\n'), true)).toBe(true);
+  });
+
+  it('rejects invalid UTF-8 (a Latin-1 byte)', () => {
+    expect(looksLikeText(bytes('Caf', [0xe9], ' au lait'), true)).toBe(false);
+  });
+
+  it('allows a character cut at the end of the head or window', () => {
+    expect(looksLikeText(bytes('ab', [0xc3]), true)).toBe(true);
+    expect(looksLikeText(bytes('x'.repeat(4095), 'é'), true)).toBe(true);
+  });
+
+  it('allows a mid-character start only past offset 0', () => {
+    const tail = bytes([0xa9], ' 2026\n');
+    expect(looksLikeText(tail, false)).toBe(true);
+    expect(looksLikeText(tail, true)).toBe(false);
+  });
+
+  it('checks only the head of the window', () => {
+    expect(looksLikeText(bytes('x'.repeat(5000), [0xff]), true)).toBe(true);
+  });
+});
 
 describe('extensionOf', () => {
   it.each([

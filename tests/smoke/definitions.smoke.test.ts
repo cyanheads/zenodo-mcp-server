@@ -42,6 +42,14 @@ describe('tool definition smoke test', () => {
     });
     expect(getEnrichment(ctx)).toMatchObject({ truncated: false, totalCount: 1 });
     expect(lookupVocabulary.format?.(result)[0]).toMatchObject({ type: 'text' });
+
+    // Either spelling the lookup prints feeds zenodo_search_records.
+    const entry = result.entries[0];
+    for (const value of [entry?.filter_value, entry?.search_value]) {
+      expect(searchRecords.input.parse({ resource_type: value }).resource_type).toEqual([
+        'publication-article',
+      ]);
+    }
   });
 
   it('rejects an unparseable zenodo_get_record id before any upstream call', async () => {
@@ -64,6 +72,14 @@ describe('tool definition smoke test', () => {
 
     await expect(call).rejects.toMatchObject({ data: { reason: 'result_window_exceeded' } });
     expect(getEnrichment(ctx)).toMatchObject({ appliedSort: 'bestmatch', allVersions: false });
+  });
+
+  it('rejects a zenodo_list_versions page past the 10,000 window locally', async () => {
+    const call = listVersions.handler(
+      listVersions.input.parse({ id: '591564', page: 401, size: 25 }),
+      createMockContext({ errors: listVersions.errors }),
+    );
+    await expect(call).rejects.toMatchObject({ data: { reason: 'result_window_exceeded' } });
   });
 
   it('rejects an unparseable id on the drill-down tools before any upstream call', async () => {

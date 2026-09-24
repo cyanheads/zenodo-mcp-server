@@ -395,6 +395,27 @@ describe('zenodo_list_versions — error contract', () => {
     expect(fm.calls).toHaveLength(0);
   });
 
+  it.each([
+    { page: 401, size: 25 },
+    { page: 10_001, size: 1 },
+  ])('result_window_exceeded for %j, before any upstream call', async (paging) => {
+    const err = await failure({ id: '591564', ...paging });
+    expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      `page ${paging.page} × size ${paging.size} is past the first 10,000 versions Zenodo pages through.`,
+    );
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it('sends page × size exactly at the 10,000 window upstream', async () => {
+    serveVersions('22705923', hitsBody([], 47));
+    serveLatest('22705923', 'https://zenodo.org/api/records/22705923');
+    const { result, enrichment } = await call({ id: '22705923', page: 400, size: 25 });
+    expect(queryOf(fm.calls[0]?.request as Request)).toContainEqual(['page', '400']);
+    expect(result).toMatchObject({ found: true, total_versions: 47, versions: [] });
+    expect(enrichment.notice).toBe('Page 400 is past the last page (2).');
+  });
+
   it('record_unavailable after a /versions 500 and its one retry', async () => {
     serveVersions('1004', { status: 500 }, 500);
     const err = await failure({ id: '1004' }, 5_000);
