@@ -34,7 +34,7 @@
         },
         {
           "name": "ZENODO_ACCESS_TOKEN",
-          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 30 req/min, larger page sizes).",
+          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous).",
           "format": "string",
           "isRequired": false,
           "isSecret": true
@@ -98,7 +98,7 @@
         },
         {
           "name": "ZENODO_ACCESS_TOKEN",
-          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 30 req/min, larger page sizes).",
+          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous).",
           "format": "string",
           "isRequired": false,
           "isSecret": true

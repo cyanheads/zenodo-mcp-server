@@ -33,7 +33,7 @@
     "zenodo_access_token": {
       "type": "string",
       "title": "Zenodo Access Token",
-      "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 30 req/min, larger page sizes). Generate one at https://zenodo.org/account/settings/applications/tokens/new/.",
+      "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous). Generate one at https://zenodo.org/account/settings/applications/tokens/new/.",
       "required": false,
       "sensitive": true,
       "default": ""
