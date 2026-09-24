@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "zenodo-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files via MCP. STDIO or Streamable HTTP.",
   "author": { "name": "cyanheads" },
   "repository": {
