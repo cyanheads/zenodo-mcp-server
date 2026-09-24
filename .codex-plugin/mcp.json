@@ -1,0 +1,10 @@
+{
+  "zenodo-mcp-server": {
+    "command": "npx",
+    "args": ["-y", "@cyanheads/zenodo-mcp-server"],
+    "env": {
+      "MCP_TRANSPORT_TYPE": "stdio"
+    },
+    "env_vars": ["ZENODO_ACCESS_TOKEN"]
+  }
+}

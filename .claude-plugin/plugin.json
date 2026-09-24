@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "zenodo-mcp-server",
+  "version": "0.1.0",
+  "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files. Keyless. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "cyanheads",
+    "email": "casey@caseyjhand.com",
+    "url": "https://github.com/cyanheads"
+  },
+  "homepage": "https://github.com/cyanheads/zenodo-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/zenodo-mcp-server",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "mcp-server", "model-context-protocol", "zenodo", "cern", "research", "datasets"],
+  "userConfig": {
+    "zenodo_access_token": {
+      "type": "string",
+      "title": "Zenodo access token",
+      "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 30 req/min, larger page sizes). Generate one at zenodo.org/account/settings/applications/tokens/new.",
+      "sensitive": true,
+      "required": false,
+      "default": ""
+    }
+  },
+  "mcpServers": {
+    "zenodo-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "@cyanheads/zenodo-mcp-server"],
+      "env": {
+        "MCP_TRANSPORT_TYPE": "stdio",
+        "ZENODO_ACCESS_TOKEN": "${user_config.zenodo_access_token}"
+      }
+    }
+  }
+}

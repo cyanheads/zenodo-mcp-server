@@ -1,0 +1,25 @@
+{
+  "name": "zenodo-mcp-server",
+  "version": "0.1.0",
+  "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files. Keyless. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "cyanheads",
+    "email": "casey@caseyjhand.com",
+    "url": "https://github.com/cyanheads"
+  },
+  "homepage": "https://github.com/cyanheads/zenodo-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/zenodo-mcp-server",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "mcp-server", "model-context-protocol", "zenodo", "cern", "research", "datasets"],
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "zenodo-mcp-server",
+    "shortDescription": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding.",
+    "longDescription": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files. Keyless. STDIO or Streamable HTTP.",
+    "developerName": "cyanheads",
+    "category": "research",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/cyanheads/zenodo-mcp-server",
+    "defaultPrompt": []
+  }
+}
