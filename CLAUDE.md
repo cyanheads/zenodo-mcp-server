@@ -5,22 +5,11 @@
 **Framework:** [@cyanheads/mcp-ts-core](https://www.npmjs.com/package/@cyanheads/mcp-ts-core) `^0.13.6`
 **Engines:** Bun ≥1.4.0, Node ≥24.0.0
 **MCP SDK:** `@modelcontextprotocol/server` ^2.0.0
-**Zod:** ^4.4.3
+**Zod:** ^4.6.5
 
 > **Read the framework docs first:** `node_modules/@cyanheads/mcp-ts-core/CLAUDE.md` contains the full API reference — builders, Context, error codes, exports, patterns. This file covers server-specific conventions only.
 
----
-
-## First Session
-
-This project was just scaffolded with `bunx @cyanheads/mcp-ts-core init`. You're holding a production-grade MCP framework with the hard parts already solved — error handling, telemetry, auth, transport, validation, lifecycle. What's missing is the **domain**. Your job: design the tool, resource, and service surface with the user, then implement it as small pure handlers that throw — the framework catches, classifies, and instruments the rest. Design before code; the user's first messages set direction, so wait for them before scaffolding definitions.
-
-> **Remove this section** from CLAUDE.md / AGENTS.md after completing these steps. The skills and conventions below remain — this block is one-time onboarding only.
-
-1. **Get your bearings.** Take stock of the project tree, the skills in `framework-skills/`, and the tools/MCP servers available. Light tool use is fine for context-building — you're mapping the territory, not committing yet.
-2. **Read the framework docs** — `node_modules/@cyanheads/mcp-ts-core/CLAUDE.md` (builders, Context, errors, exports, conventions)
-3. **Run the `setup` skill** — read `framework-skills/setup/SKILL.md` and follow its checklist (project orientation, agent protocol file selection, echo definition cleanup, skill sync)
-4. **Design the server** — read `framework-skills/design-mcp-server/SKILL.md` and work through it with the user to map the domain into tools, resources, and services before scaffolding
+Six read-only tools over the Zenodo REST API (`https://zenodo.org/api`, InvenioRDM): `zenodo_search_records`, `zenodo_get_record`, `zenodo_list_versions`, `zenodo_list_files`, `zenodo_read_file`, `zenodo_lookup_vocabulary`. No resources, no prompts. No credentials are needed; the optional `ZENODO_ACCESS_TOKEN` raises the rate limit and changes nothing else. [`docs/design.md`](./docs/design.md) holds the per-tool contracts, the verified upstream behavior behind them, and the decisions log — read it before changing a tool.
 
 ---
 
@@ -29,15 +18,14 @@ This project was just scaffolded with `bunx @cyanheads/mcp-ts-core init`. You're
 When the user asks what's next or needs direction, suggest options based on the current project state. Common next steps:
 
 1. **Re-run the `setup` skill** — ensures CLAUDE.md, skills, structure, and metadata are populated and up to date with the current codebase
-2. **Run the `design-mcp-server` skill** — if the tool/resource surface hasn't been mapped yet, work through domain design
-3. **Add tools/resources/prompts** — scaffold new definitions using the `add-tool`, `add-app-tool`, `add-resource`, `add-prompt` skills
-4. **Add services** — scaffold domain service integrations using the `add-service` skill
-5. **Add tests** — scaffold tests for existing definitions using the `add-test` skill
-6. **Field-test definitions** — exercise tools/resources/prompts with real inputs using the `field-test` skill, get a report of issues and pain points
-7. **Run `devcheck`** — lint, format, typecheck, and security audit
-8. **Run the `security-pass` skill** — audit handlers for MCP-specific security gaps: output injection, scope blast radius, input sinks, tenant isolation
-9. **Run the `polish-docs-meta` skill** — finalize README, CHANGELOG, metadata, and agent protocol for shipping
-10. **Run the `maintenance` skill** — investigate changelogs, adopt upstream changes, and sync skills after `bun update --latest`
+2. **Run the `design-mcp-server` skill** — before adding a tool, extend `docs/design.md` with its contract
+3. **Add tools** — scaffold new definitions using the `add-tool` skill, and register them in `src/mcp-server/tools/definitions/index.ts`
+4. **Add tests** — scaffold tests for existing definitions using the `add-test` skill
+5. **Field-test definitions** — exercise the tools against live Zenodo using the `field-test` skill (pace searches: 25/min per process)
+6. **Run `devcheck`** — lint, format, typecheck, and security audit
+7. **Run the `security-pass` skill** — audit handlers for MCP-specific security gaps: output injection, scope blast radius, input sinks, tenant isolation
+8. **Run the `polish-docs-meta` skill** — finalize README, CHANGELOG, metadata, and agent protocol for shipping
+9. **Run the `maintenance` skill** — investigate changelogs, adopt upstream changes, and sync skills after `bun update --latest`
 
 Tailor suggestions to what's actually missing or stale — don't recite the full list every time.
 
@@ -55,77 +43,87 @@ Tailor suggestions to what's actually missing or stale — don't recite the full
 
 ---
 
+## Zenodo conventions
+
+- **One fetch boundary.** Every upstream call goes through `ZenodoHttp` in `src/services/zenodo/http.ts`: per-call accept-lists (206, 301/302, 403, 404, 410, 416 are results, not errors), at most one retry, and no caller-controlled host — the service builds every path under `https://zenodo.org/api`. Tools call `getZenodoService()`, never `fetch`.
+- **Two pacers, one budget per process.** `zenodo-search` (25/min) and `zenodo-general` (55/min and 1,900/hr anonymous; 90/min and 4,800/hr with a token), plus a header gate on `X-RateLimit-*`. A search takes a general start slot first. Every caller of the process shares the budget, so never add bulk or fan-out calls.
+- **Process-local cache, not `ctx.state`.** Zenodo data is public, so `TtlLruCache` (`cache.ts`) is shared across tenants: records 5 min, searches 60 s, containers 10 min, vocabularies 1 h.
+- **Identifiers parse locally.** `parseRecordRef()` (`identifiers.ts`) classifies every `id` form — record id, Zenodo DOI, concept DOI, external DOI, zenodo.org / doi.org URL. URLs are never fetched. All four `id`-taking tools share it.
+- **Misses by tool role.** `zenodo_get_record` and `zenodo_list_versions` return `found: false` with `miss_kind`, `guidance`, and `tombstone` (shared in `record-miss.ts`); `zenodo_list_files` and `zenodo_read_file` throw `record_not_found` / `record_deleted`.
+- **Untrusted text through the render helpers.** Every depositor-supplied string in `format()` goes through `inline()`, `quoteBlock()`, or `fence()` (`src/mcp-server/tools/render.ts`). HTML descriptions are converted by `htmlToText()` — the only transformation of upstream text.
+- **Blank optional inputs read as unset.** Wrap optional strings and arrays with `blankToUndefined` / `toOptionalArray`, and enums with `enumPreprocess` (`schema-helpers.ts`). Never `.min(1)` on an optional field.
+- **Enrichment defaults first.** A handler with required enrichment keys writes all of them on its first line, then overwrites where they change — a one-branch write fails the output parse on every other path.
+- **Sparse fields stay absent.** An upstream field Zenodo omits is omitted from the output, never coerced to `0`, `''`, or `false`, and its `.describe()` says when it is absent.
+
+---
+
 ## Patterns
 
 ### Tool
 
+Abridged from `src/mcp-server/tools/definitions/list-versions.tool.ts`:
+
 ```ts
 import { tool, z } from '@cyanheads/mcp-ts-core';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
+import { parseRecordRef } from '@/services/zenodo/identifiers.js';
+import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import { notOnZenodoMiss, recordMiss, TombstoneSchema } from '../record-miss.js';
 
-export const searchItems = tool('search_items', {
-  description: 'Search inventory items by query.',
-  annotations: { readOnlyHint: true },
+export const listVersions = tool('zenodo_list_versions', {
+  title: 'List Zenodo record versions',
+  description: "List every version of a Zenodo deposit's version series, newest first, …",
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
-    query: z.string().describe('Search terms'),
-    limit: z.number().default(10).describe('Max results'),
+    id: z.string().trim().min(1).max(500).describe('Any version or concept identifier of the deposit: …'),
+    page: z.number().int().min(1).default(1).describe('Result page, starting at 1. page × size may not exceed 10,000.'),
+    size: z.number().int().min(1).max(25).default(25).describe('Versions per page (1–25).'),
   }),
-  output: z.object({
-    items: z.array(z.object({
-      id: z.string().describe('Item ID'),
-      name: z.string().describe('Item name'),
-    })).describe('Matching items'),
-  }),
-  auth: ['inventory:read'],
+  output: z.object({ /* found, input_kind, miss_kind?, guidance?, tombstone?, total_versions?, versions[], … */ }),
+  enrichment: {
+    truncated: z.boolean().describe('True when more versions follow this page.'),
+    shown: z.number().describe('Versions returned on this page.'),
+    cap: z.number().describe('Page size applied.'),
+    totalCount: z.number().describe('Number of versions in the series.'),
+    notice: z.string().optional().describe('Guidance on paging or a page past the end.'),
+  },
+  errors: [
+    {
+      reason: 'invalid_identifier',
+      code: JsonRpcErrorCode.ValidationError,
+      when: 'id matches no accepted form, or is a GitHub-badge latestdoi id or a non-zenodo.org host',
+      recovery: 'Pass a Zenodo record id (22705923), a DOI (10.5281/zenodo.22705923), or a zenodo.org/records URL as id; …',
+    },
+    // result_window_exceeded, record_unavailable, upstream_timeout, rate_limited …
+  ],
 
   async handler(input, ctx) {
-    const items = await findItems(input.query, input.limit);
-    ctx.log.info('Search completed', { query: input.query, count: items.length });
-    return { items };
+    ctx.enrich({ truncated: false, shown: 0, cap: input.size, totalCount: 0 }); // required keys, first line
+
+    const ref = parseRecordRef(input.id);
+    if (ref.kind === 'invalid') {
+      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
+    }
+    const service = getZenodoService();
+    // … resolve an external DOI; on a miss return { found: false, ...notOnZenodoMiss(doi), … }
+    // … a record-GET miss returns { found: false, ...recordMiss(recid, lookup), … }
+
+    const lookup = await service.listVersions(recid, input.page, input.size, ctx);
+    const hasMore = input.page * input.size < lookup.total;
+    ctx.enrich({ shown: lookup.hits.length });
+    ctx.enrich.total(lookup.total);
+    if (hasMore) {
+      ctx.enrich.truncated({
+        shown: lookup.hits.length,
+        cap: input.size,
+        guidance: `Showing ${lookup.hits.length} of ${lookup.total} versions; call again with page ${input.page + 1}.`,
+      });
+    }
+    return { found: true, input_kind: ref.inputKind, total_versions: lookup.total, /* … */ versions: lookup.hits };
   },
 
-  // format() populates content[] — the markdown twin of structuredContent.
-  // Different clients read different surfaces (Claude Code → structuredContent,
-  // Claude Desktop → content[]); both must carry the same data.
-  // Enforced at lint time: every field in `output` must appear in the rendered text.
-  format: (result) => [{
-    type: 'text',
-    text: result.items.map(i => `**${i.id}**: ${i.name}`).join('\n'),
-  }],
-});
-```
-
-### Resource
-
-```ts
-import { resource, z } from '@cyanheads/mcp-ts-core';
-import { notFound } from '@cyanheads/mcp-ts-core/errors';
-
-export const itemData = resource('inventory://{itemId}', {
-  description: 'Fetch an inventory item by ID.',
-  params: z.object({ itemId: z.string().describe('Item identifier') }),
-  auth: ['inventory:read'],
-  async handler(params, ctx) {
-    const item = await ctx.state.get(`item/${params.itemId}`);
-    if (!item) throw notFound(`Item ${params.itemId} not found`, { itemId: params.itemId });
-    return item;
-  },
-});
-```
-
-### Prompt
-
-```ts
-import { prompt, z } from '@cyanheads/mcp-ts-core';
-
-export const reviewCode = prompt('review_code', {
-  description: 'Review code for issues and best practices.',
-  args: z.object({
-    code: z.string().describe('Code to review'),
-    language: z.string().optional().describe('Programming language'),
-  }),
-  generate: (args) => [
-    { role: 'user', content: { type: 'text', text: `Review this ${args.language ?? ''} code:\n${args.code}` } },
-  ],
+  // format() renders every output field; depositor text goes through inline() / quoteBlock().
+  format: (result) => [{ type: 'text', text: /* … */ '' }],
 });
 ```
 
@@ -137,76 +135,64 @@ import { z } from '@cyanheads/mcp-ts-core';
 import { parseEnvConfig } from '@cyanheads/mcp-ts-core/config';
 
 const ServerConfigSchema = z.object({
-  apiKey: z.string().describe('External API key'),
-  maxResults: z.coerce.number().default(100),
-  verboseLogging: z.stringbool().default(false).describe('Enable verbose logging'),
+  accessToken: z
+    .string()
+    .optional()
+    .describe(
+      'Zenodo personal access token (created with no scopes). Raises the global rate limit; tool behavior and page sizes are unchanged.',
+    ),
 });
 
 let _config: z.infer<typeof ServerConfigSchema> | undefined;
 export function getServerConfig() {
-  _config ??= parseEnvConfig(ServerConfigSchema, {
-    apiKey: 'MY_API_KEY',
-    maxResults: 'MY_MAX_RESULTS',
-    verboseLogging: 'MY_VERBOSE_LOGGING',
-  });
+  _config ??= parseEnvConfig(ServerConfigSchema, { accessToken: 'ZENODO_ACCESS_TOKEN' });
   return _config;
 }
 ```
 
-`parseEnvConfig` maps Zod schema paths → env var names so errors name the variable (`MY_API_KEY`) not the path (`apiKey`). Throws `ConfigurationError`, which the framework prints as a clean startup banner.
+`parseEnvConfig` maps Zod schema paths → env var names so errors name the variable (`ZENODO_ACCESS_TOKEN`) not the path (`accessToken`). A blank value or an unsubstituted `${…}` placeholder reads as unset. A new env var also goes into `server.json`, `manifest.json`, both plugin manifests, and `.env.example` (see Bundling).
 
-For env booleans use `z.stringbool()`, never `z.coerce.boolean()` — `Boolean("false")` is `true`, so a coerced flag can't be disabled through the environment. `z.stringbool()` parses `true/false/1/0/yes/no/on/off` and rejects anything else, so `=false` actually disables.
+For env booleans use `z.stringbool()`, never `z.coerce.boolean()` — `Boolean("false")` is `true`, so a coerced flag can't be disabled through the environment.
 
-### Server identity and instructions
+### Server identity and lifecycle
 
-`createApp()` accepts optional identity fields forwarded to the SDK's `initialize` response and the server manifest (`/.well-known/mcp.json`):
-
-```ts
-await createApp({
-  name: 'my-mcp-server',
-  title: 'My Server',                         // human-readable display name
-  websiteUrl: 'https://github.com/owner/repo', // canonical homepage URL
-  description: 'One-line description.',        // wins over MCP_SERVER_DESCRIPTION
-  icons: [{ src: 'https://example.com/icon.png', sizes: ['48x48'], mimeType: 'image/png' }],
-  instructions: 'Use shortcut alpha for the most common case.', // session-level context
-});
-```
-
-`instructions` is optional server-level orientation, sent on every `initialize` as session-level context. Use it for deployment guidance (connection aliases, regional notes, scope hints) instead of repeating the same context across tool descriptions. Client adoption is uneven, but there's no downside when set.
-
-### Session posture and shutdown
-
-Two more `createApp()` options shape how the server runs rather than how it presents itself:
+`src/index.ts`:
 
 ```ts
 await createApp({
-  sessionMode: 'stateless',          // or { default: 'stateful', require: 'stateful' }
-  setup(core) { startMyWatcher(core.config); },
-  async teardown() { await stopMyWatcher(); },
+  name: 'zenodo-mcp-server',
+  title: 'zenodo-mcp-server',
+  instructions: "Zenodo is CERN's open research repository … metadata is CC0 and each file keeps its deposit's license.",
+  tools: allToolDefinitions,
+  setup(core) {
+    initZenodoService(core.config);
+  },
+  teardown() {
+    disposeZenodoService();
+  },
 });
 ```
 
-`sessionMode` declares the HTTP session posture in `src/` instead of leaving it to a deployment's `MCP_SESSION_MODE`, which still wins whenever it carries a meaningful value (an empty string and an unsubstituted `${…}` placeholder read as unset and fall through to the option). Add `require: 'stateful'` when a tool asks the caller for input mid-handler via `ctx.requestInput`: startup then fails with a `ConfigurationError` rather than serving a mode in which a 2025-era client can never answer the prompt. Stdio is never refused.
+The identity block is `name` + `title` only, both the bare hyphenated `zenodo-mcp-server` — never Title Case, never the npm scope, and never a duplicated `description` (it derives from `package.json`). `instructions` is session-level orientation sent on every `initialize`; keep it in step with the tool descriptions. `setup()` builds the service (pacers, cache, a User-Agent carrying the server version); `teardown()` disposes the pacers' timers.
 
-`teardown(core)` is the `setup()` counterpart — release a watcher, socket, or non-`unref()`'d timer there. It runs after the transport stops and before the logger closes, on every shutdown path, and a signal-triggered shutdown then exits the process explicitly (0, or 1 if a step never settles within the framework's 10 s ceiling).
+No handler calls `ctx.requestInput`, so no `sessionMode` requirement is declared; the Dockerfile and `.env.example` run HTTP as `stateless`.
 
 ---
 
 ## Context
 
-Handlers receive a unified `ctx` object. Key properties:
+Handlers receive a unified `ctx` object. The properties this server uses:
 
 | Property | Description |
 |:---------|:------------|
 | `ctx.log` | Request-scoped logger — `.debug()`, `.info()`, `.notice()`, `.warning()`, `.error()`. Auto-correlates requestId, traceId, tenantId. Dual-sink: Pino **and** `notifications/message` to the client, so treat it as client-visible. |
-| `ctx.state` | Tenant-scoped KV — `.get(key)`, `.set(key, value, { ttl? })`, `.delete(key)`, `.getMany(keys)`, `.list(prefix, { cursor, limit })`. Accepts any serializable value. |
-| `ctx.requestInput` | Suspend and ask the caller for more input — `return ctx.requestInput({ inputRequests: { key: inputRequired.elicit({ message, requestedSchema }) } })`. Never returns; the handler is re-entered with the answers. Always present. |
-| `ctx.inputs` | Reader over a retried request's responses — `.accepted(key, schema)`, `.view(key)`, `.state()`, `.dropped`. Empty on the first round. |
-| `ctx.enrich` | Success-path agent context (empty-result notices, query echo, pagination totals) — `ctx.enrich(...)` or `.notice()` / `.total()` / `.echo()` / `.truncated()`. Reaches `structuredContent` and `content[]`; lands only when the definition declares an `enrichment` block (no-op otherwise). |
-| `ctx.content` | Non-text content blocks — `.image(data, mimeType)`, `.audio(data, mimeType)`, or `ctx.content(block)` for a raw block. Prepended to `content[]` after `format()`; never enters `structuredContent`. |
-| `ctx.signal` | `AbortSignal` for cancellation. |
+| `ctx.enrich` | Success-path agent context — `ctx.enrich(...)` or `.notice()` / `.total()` / `.echo()` / `.truncated()`. Every tool declares an `enrichment` block; see *Enrichment defaults first*. |
+| `ctx.fail` / `ctx.recoveryFor` | Throw a declared error-contract reason with its recovery hint: `throw ctx.fail('reason', message, ctx.recoveryFor('reason'))`. |
+| `ctx.signal` | `AbortSignal` for cancellation — the service threads it into every upstream request and pacer wait. |
 | `ctx.requestId` | Unique request ID. |
 | `ctx.tenantId` | Tenant ID from JWT; `'default'` for stdio or HTTP with auth off. |
+
+`ctx.state`, `ctx.requestInput` / `ctx.inputs`, and `ctx.content` are unused: responses are cached process-wide in the service, no tool asks for input mid-call, and every tool returns text.
 
 ---
 
@@ -214,41 +200,23 @@ Handlers receive a unified `ctx` object. Key properties:
 
 Handlers throw — the framework catches, classifies, and formats.
 
-**Recommended: typed error contract.** Declare `errors: [{ reason, code, when, recovery, retryable?, severity?, thrownBy? }]` on `tool()` / `resource()` to receive `ctx.fail(reason, …)` typed against the reason union. TypeScript catches typos at compile time, `data.reason` is auto-populated for observability, linter enforces conformance against the handler body. `recovery` is required (≥ 5 words, lint-validated) — the single source of truth for the agent's next move. Pass `ctx.recoveryFor('reason')` as the throw's data to put it on the wire (`data.recovery.hint`, mirrored into `content[]` text unless the message already contains it verbatim); override with an explicit `{ recovery: { hint: '...' } }` when dynamic runtime context matters. Forwarding it is lint-enforced per throw site (`error-contract-recovery-unforwarded`). Mark an entry the service layer throws with `thrownBy: 'service'` so `error-contract-unthrown` skips it — lint-only metadata, nothing at runtime reads it. Baseline codes (`InternalError`, `ServiceUnavailable`, `Timeout`, `ValidationError`, `SerializationError`, `RequestCancelled`) bubble freely and don't need declaring.
+**Typed error contract.** Every tool declares `errors: [{ reason, code, when, recovery, retryable?, thrownBy? }]` inline and throws with `ctx.fail(reason, …, ctx.recoveryFor(reason))`. `when` is model-facing text (the framework advertises it), so write it for the calling model — no implementation terms like "record GET" or "pacer shed". `recovery` names the next tool call. Reasons the service throws (`rate_limited`, `record_unavailable`, `upstream_timeout`, `query_failed`, `archive_unavailable`) carry `thrownBy: 'service'`. Baseline codes (`InternalError`, `ServiceUnavailable`, `Timeout`, `ValidationError`, `SerializationError`, `RequestCancelled`) bubble freely and don't need declaring.
 
 ```ts
-import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-
 errors: [
-  { reason: 'no_match', code: JsonRpcErrorCode.NotFound,
-    when: 'No item matched the query',
-    recovery: 'Broaden the query or check the spelling and try again.' },
+  { reason: 'unknown_community', code: JsonRpcErrorCode.ValidationError,
+    when: 'community resolves to no Zenodo community',
+    recovery: 'Find the community’s slug with zenodo_lookup_vocabulary (vocabulary: communities), then pass it as community.' },
 ],
 async handler(input, ctx) {
-  const item = await db.find(input.id);
-  if (!item) throw ctx.fail('no_match', `No item ${input.id}`, ctx.recoveryFor('no_match'));
-  return item;
+  const community = ref ? await service.getCommunity(ref, ctx) : undefined;
+  if (!community) {
+    throw ctx.fail('unknown_community', `No Zenodo community matches "${inline(input.community)}" …`, ctx.recoveryFor('unknown_community'));
+  }
 }
 ```
 
 **Declare contracts inline on each tool.** The contract is part of the tool's public surface — one file should give the full picture. Don't extract a shared `errors[]` constant; per-tool repetition is the intended cost of locality.
-
-**Fallback (no contract entry fits):** throw via factories or plain `Error`.
-
-```ts
-// Error factories — explicit code
-import { notFound, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
-throw notFound('Item not found', { itemId });
-throw serviceUnavailable('API unavailable', { url }, { cause: err });
-
-// Plain Error — framework auto-classifies from message patterns
-throw new Error('Item not found');           // → NotFound
-throw new Error('Invalid query format');     // → ValidationError
-
-// McpError — when no factory exists for the code
-import { McpError, JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-throw new McpError(JsonRpcErrorCode.InitializationFailed, 'Connection failed', { pool: 'primary' });
-```
 
 See framework CLAUDE.md and the `api-errors` skill for the full auto-classification table, all available factories, and the contract reference.
 
@@ -258,20 +226,36 @@ See framework CLAUDE.md and the `api-errors` skill for the full auto-classificat
 
 ```text
 src/
-  index.ts                              # createApp() entry point
+  index.ts                              # createApp(): identity, instructions, tools, setup/teardown
   config/
-    server-config.ts                    # Server-specific env vars (Zod schema)
-  services/
-    [domain]/
-      [domain]-service.ts               # Domain service (init/accessor pattern)
-      types.ts                          # Domain types
-  mcp-server/
-    tools/definitions/
-      [tool-name].tool.ts               # Tool definitions
-    resources/definitions/
-      [resource-name].resource.ts       # Resource definitions
-    prompts/definitions/
-      [prompt-name].prompt.ts           # Prompt definitions
+    server-config.ts                    # ZENODO_ACCESS_TOKEN (Zod schema, lazy parse)
+  services/zenodo/
+    zenodo-service.ts                   # ZenodoService + init/get/dispose accessors
+    http.ts                             # Fetch boundary: accept-lists, retries, pacers, header gate
+    cache.ts                            # Process-local TTL LRU with a byte budget
+    normalize.ts                        # Raw RDM JSON → domain types
+    identifiers.ts                      # parseRecordRef, ROR / Funder DOI / ORCID / community parsing
+    query-builder.ts                    # Composes the search q from filters
+    html-to-text.ts                     # HTML description → plain text
+    text-preview.ts                     # Preview mode, byte cut, binary detection
+    resource-types.ts                   # Static 43-entry resource type table
+    types.ts                            # Raw upstream and domain types
+  mcp-server/tools/
+    definitions/
+      index.ts                          # allToolDefinitions barrel
+      [tool-name].tool.ts               # The six tool definitions
+    render.ts                           # inline / quoteBlock / fence for untrusted text
+    schema-helpers.ts                   # blankToUndefined, toOptionalArray, enumPreprocess
+    record-miss.ts                      # Shared found:false outcome + TombstoneSchema
+tests/
+  fixtures/zenodo/                      # Recorded Zenodo responses
+  helpers/                              # Fixture loaders
+  services/zenodo/                      # Service and pure-module tests
+  mcp-server/tools/                     # Tool handler and helper tests
+  fuzz/                                 # Adversarial-input fuzz tests
+  smoke/                                # Definition smoke tests
+docs/
+  design.md                             # Tool contracts, verified API behavior, decisions log
 ```
 
 ---
@@ -280,10 +264,11 @@ src/
 
 | What | Convention | Example |
 |:-----|:-----------|:--------|
-| Files | kebab-case with suffix | `search-docs.tool.ts` |
-| Tool/resource/prompt names | snake_case | `search_docs` |
-| Directories | kebab-case | `src/services/doc-search/` |
-| Descriptions | Single string or template literal, no `+` concatenation | `'Search items by query and filter.'` |
+| Files | kebab-case with suffix | `list-versions.tool.ts` |
+| Tool names | snake_case, `zenodo_` prefix | `zenodo_list_versions` |
+| Directories | kebab-case | `src/services/zenodo/` |
+| Descriptions | Single string or template literal, no `+` concatenation | `'Resolve names to the ids zenodo_search_records filters on, …'` |
+| Input and output fields | snake_case | `concept_recid`, `latest_recid`, `next_offset` |
 
 ---
 
@@ -350,27 +335,31 @@ When you complete a skill's checklist, check the boxes and add a completion time
 | `bun run audit:fix` | `bun audit fix` — upgrade vulnerable packages to the lowest safe version within existing ranges (`--dry-run` previews, `--latest` rewrites ranges). First response when `devcheck` flags a transitive advisory; then `bun update <name>`, then `bun dedupe` |
 | `bun run audit:refresh` | Delete `bun.lock` and reinstall. Last resort after `audit:fix`, `bun update <name>`, and `bun dedupe` — re-resolves every ranged dep (the framework pin included) and rewrites the lockfile as `lockfileVersion: 2` |
 | `bun run lint:mcp` | Run the MCP definition linter standalone (rule catalog: `api-linter` skill) |
-| `bun run lint:packaging` | Packaging surface checks — `server.json`/`manifest.json` env-var parity (run by devcheck) |
+| `bun run lint:packaging` | Packaging surface checks — `server.json`/`manifest.json` env-var parity, plugin manifest identity, README version badge (run by devcheck) |
 | `bun run list-skills` | Print the skill registry |
 | `bun run tree` | Generate directory structure doc |
 | `bun run format` | Auto-fix formatting (safe fixes only) |
 | `bun run format:unsafe` | Also apply Biome's unsafe autofixes — review the diff; they can change behavior |
 | `bun run test` | Run tests (Vitest — use `bun run test`, not `bun test`) |
+| `bun run test:coverage` | Run tests with coverage |
 | `bun run start:stdio` | Production mode (stdio) |
 | `bun run start:http` | Production mode (HTTP) |
 | `bun run changelog:build` | Regenerate `CHANGELOG.md` from `changelog/*.md` |
 | `bun run changelog:check` | Verify `CHANGELOG.md` is in sync (used by devcheck) |
 | `bun run bundle` | Build, pack, and clean a `.mcpb` for one-click Claude Desktop install |
+| `bun run release:github` | Create the GitHub Release from an annotated tag and attach the `.mcpb` bundle |
 
 **CI is one file.** `.github/workflows/codeql.yml` (scaffolded) is the only GitHub Actions workflow: CodeQL is GitHub-owned end to end, and the file runs only while the repo's CodeQL *default setup* is turned off. Verification — `devcheck`, tests, the release gates — runs locally; don't add a workflow that re-runs it.
+
+**Tests never touch the network.** Service and tool tests run the real service against recorded responses in `tests/fixtures/zenodo/` through a fetch mock; a new upstream shape gets a trimmed fixture, not a live call.
 
 ---
 
 ## Bundling
 
-`npm run bundle` produces a `.mcpb` extension bundle for one-click install in Claude Desktop. The pack step is followed by `scripts/clean-mcpb.ts`, which prunes dev dependencies (`mcpb clean`) and strips two classes of `node_modules/**` content that root-anchored `.mcpbignore` patterns cannot reach: dependency-shipped agent docs (`framework-skills/`, `skills/`, `.claude/`, `.agents/`, `SKILL.md`) and platform-specific native bindings, which would otherwise lock the bundle to the platform it was packed on. A server using DataCanvas therefore ships a portable bundle without the DuckDB native — `@duckdb/node-api` is an optional peer loaded lazily, so canvas tools report an actionable install hint and every other tool works normally. MCPB is stdio-only — HTTP and Cloudflare Workers deployments are unaffected. Consumers who don't need it can delete `manifest.json` and `.mcpbignore`; `lint:packaging` skips cleanly.
+`npm run bundle` produces a `.mcpb` extension bundle for one-click install in Claude Desktop. The pack step is followed by `scripts/clean-mcpb.ts`, which prunes dev dependencies (`mcpb clean`) and strips two classes of `node_modules/**` content that root-anchored `.mcpbignore` patterns cannot reach: dependency-shipped agent docs (`framework-skills/`, `skills/`, `.claude/`, `.agents/`, `SKILL.md`) and platform-specific native bindings, which would otherwise lock the bundle to the platform it was packed on. MCPB is stdio-only — HTTP and Cloudflare Workers deployments are unaffected.
 
-**Adding an env var requires both files:** `server.json` (registry discovery, `environmentVariables[]`) and `manifest.json` (bundle install UX, `mcp_config.env` + `user_config`). `lint:packaging` (run by `devcheck`) verifies the env var names match, that every `user_config` option is wired into `mcp_config.env` as `"X": "${user_config.X}"` (the host substitutes nothing else — `"${X}"` reaches the server as that literal string), and that an optional string option carries `"default": ""`.
+**Adding an env var touches every packaging surface:** `server.json` (registry discovery, `environmentVariables[]`), `manifest.json` (bundle install UX, `mcp_config.env` + `user_config`), `.claude-plugin/plugin.json` (`userConfig` + `env`), and `.codex-plugin/mcp.json` (`env_vars`). `lint:packaging` (run by `devcheck`) verifies the env var names match, that every `user_config` option is wired into `mcp_config.env` as `"X": "${user_config.X}"` (the host substitutes nothing else — `"${X}"` reaches the server as that literal string), and that an optional string option carries `"default": ""`.
 
 **README install badges** (Claude Desktop `.mcpb`, Cursor, VS Code) and the `base64` / `encodeURIComponent` config-generation commands are ship-time concerns — run the `polish-docs-meta` skill, which carries the badge format, layout, and generation snippets in `framework-skills/polish-docs-meta/references/readme.md`.
 
@@ -407,6 +396,8 @@ security: false                            # optional — true ONLY for a source
 
 **Every release goes through a release PR, straight-through** — `git-wrapup`'s "Release PR mode", mode `straight-through`. One run: `git-wrapup` lands the commit stack on `release/<version>`, pushes it, and opens the PR (title = the release commit subject, body = the changelog entry plus a gates section); `release-and-publish` then fast-forwards `main` locally with `git merge --ff-only`, creates the tag on `main`'s tip, pushes `main` and the tag, deletes the branch, and publishes. A caller's brief may run a given release as `gated` instead — a `release-pr-review` pass on the open PR before `release-and-publish`. **Never merge through the GitHub UI or `gh pr merge`**: squash and rebase-merge are disabled in the repo settings because both rewrite the stack (rebase-merge also strips the SSH signatures), and a merge commit breaks the linear history.
 
+**Identity across publish surfaces.** The npm name `@cyanheads/zenodo-mcp-server` appears on install surfaces: the README `<h1>`, the npm and install badges, and every `bunx` / `npx -y` argument. `mcpName` and the `server.json` `name` are `io.github.cyanheads/zenodo-mcp-server`. Everywhere else — `createApp()`, `manifest.json` `name`, plugin names and server keys, the Docker image, the `.mcpb` file — it is the bare `zenodo-mcp-server`. `lint:packaging` enforces the split.
+
 ---
 
 ## Imports
@@ -417,7 +408,7 @@ import { tool, z } from '@cyanheads/mcp-ts-core';
 import { McpError, JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 // Server's own code — via path alias
-import { getMyService } from '@/services/my-domain/my-service.js';
+import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 ```
 
 ---
@@ -425,17 +416,20 @@ import { getMyService } from '@/services/my-domain/my-service.js';
 ## Checklist
 
 - [ ] Zod schemas: all fields have `.describe()`, only JSON-Schema-serializable types (no `z.custom()`, `z.date()`, `z.transform()`, `z.bigint()`, `z.symbol()`, `z.void()`, `z.map()`, `z.set()`, `z.function()`, `z.nan()`)
-- [ ] Optional nested objects: handler guards for empty inner values from form-based clients (`if (input.obj?.field && ...)`, not just `if (input.obj)`). When regex/length constraints matter, use `z.union([z.literal(''), z.string().regex(...).describe(...)])` — literal variants are exempt from `describe-on-fields`.
+- [ ] Optional inputs wrapped with `blankToUndefined` / `toOptionalArray` / `enumPreprocess`, never `.min(1)` on an optional field
 - [ ] JSDoc `@fileoverview` + `@module` on every file
-- [ ] `ctx.log` for logging, `ctx.state` for storage
-- [ ] Handlers throw on failure — error factories or plain `Error`, no try/catch
+- [ ] `ctx.log` for logging; upstream data cached in the service, not `ctx.state`
+- [ ] Handlers throw on failure via declared contract reasons (`ctx.fail` + `ctx.recoveryFor`), no try/catch
+- [ ] Every upstream call goes through `getZenodoService()` — no direct `fetch`, no caller-supplied host
 - [ ] `format()` renders all data the LLM needs — different clients forward different surfaces (Claude Code → `structuredContent`, Claude Desktop → `content[]`); both must carry the same data
-- [ ] If wrapping external API: raw/domain/output schemas reviewed against real upstream sparsity/nullability before finalizing required vs optional fields
-- [ ] If wrapping external API: normalization and `format()` preserve uncertainty; do not fabricate facts from missing upstream data
-- [ ] If wrapping external API: tests include at least one sparse payload case with omitted upstream fields
-- [ ] Registered in `createApp()` arrays (directly or via barrel exports)
+- [ ] Depositor-supplied text in `format()` passes through `inline()` / `quoteBlock()` / `fence()`
+- [ ] Required enrichment keys written unconditionally on the handler's first line
+- [ ] Sparse upstream fields optional in the output schema, left absent (never coerced), with `.describe()` saying when
+- [ ] Tests include a sparse-payload case against a trimmed fixture; no live network in `bun run test`
+- [ ] Registered in `allToolDefinitions` (`src/mcp-server/tools/definitions/index.ts`)
 - [ ] Tests use `createMockContext()` from `@cyanheads/mcp-ts-core/testing`
-- [ ] `.codex-plugin/plugin.json` populated — `name`, `version`, `description`, `repository`, `license` from `package.json`; `interface.displayName` = the unscoped repo name (never the npm scope — `lint:packaging` enforces this); `interface.shortDescription` from `package.json` description
-- [ ] `.codex-plugin/mcp.json` updated — server name key is the unscoped repo name; every user-supplied variable (API key, contact email, instance URL) is listed in `env_vars` so Codex forwards it from the user's environment. Never write `"KEY": ""` into `env` — an empty value replaces the user's exported key and is read as unset
-- [ ] `.claude-plugin/plugin.json` populated — `name`, `version`, `description`, `author`, `repository`, `license`, `keywords` from `package.json`; inline `mcpServers` entry keyed by the unscoped repo name. Every user-supplied variable is declared under `userConfig` (`type`, `title`, `description`; `sensitive: true` for keys and tokens; `required: true` or `default: ""`) and referenced from `env` as `"KEY": "${user_config.<option>}"` — mirror the `user_config` block in `manifest.json`. Never write `"KEY": ""` into `env`
-- [ ] `npm run devcheck` passes
+- [ ] `docs/design.md` updated when a tool's contract changes
+- [ ] `.codex-plugin/plugin.json` populated — `name`, `version`, `description`, `repository`, `license` from `package.json`; `interface.displayName` = the unscoped repo name (never the npm scope — `lint:packaging` enforces this)
+- [ ] `.codex-plugin/mcp.json` updated — server name key is the unscoped repo name; `ZENODO_ACCESS_TOKEN` listed in `env_vars` so Codex forwards it from the user's environment. Never write `"KEY": ""` into `env`
+- [ ] `.claude-plugin/plugin.json` populated — `name`, `version`, `description`, `author`, `repository`, `license`, `keywords`; inline `mcpServers` entry keyed by the unscoped repo name, with `ZENODO_ACCESS_TOKEN` declared under `userConfig` and referenced from `env` as `"${user_config.zenodo_access_token}"`
+- [ ] `bun run devcheck` passes with zero warnings, and `bun run test` passes

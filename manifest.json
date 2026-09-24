@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "zenodo-mcp-server",
   "version": "0.1.0",
-  "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files. Keyless. STDIO or Streamable HTTP.",
+  "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files via MCP. STDIO or Streamable HTTP.",
   "author": { "name": "cyanheads" },
   "repository": {
     "type": "git",
@@ -28,12 +28,12 @@
     "runtimes": { "node": ">=24.0.0" }
   },
   "tools_generated": true,
-  "prompts_generated": true,
+  "prompts_generated": false,
   "user_config": {
     "zenodo_access_token": {
       "type": "string",
       "title": "Zenodo Access Token",
-      "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous). Generate one at https://zenodo.org/account/settings/applications/tokens/new/.",
+      "description": "Optional Zenodo personal access token, created with no scopes. Raises Zenodo's rate limit from 60 to 100 requests per minute; searches stay at 25 per minute. Generate one at https://zenodo.org/account/settings/applications/tokens/new/.",
       "required": false,
       "sensitive": true,
       "default": ""

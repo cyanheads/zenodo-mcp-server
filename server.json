@@ -12,7 +12,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cyanheads/zenodo-mcp-server",
-      "runtimeHint": "node",
+      "runtimeHint": "bun",
       "version": "0.1.0",
       "packageArguments": [
         {
@@ -34,7 +34,7 @@
         },
         {
           "name": "ZENODO_ACCESS_TOKEN",
-          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous).",
+          "description": "Optional Zenodo personal access token, created with no scopes. Raises Zenodo's rate limit from 60 to 100 requests per minute; searches stay at 25 per minute.",
           "format": "string",
           "isRequired": false,
           "isSecret": true
@@ -48,7 +48,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cyanheads/zenodo-mcp-server",
-      "runtimeHint": "node",
+      "runtimeHint": "bun",
       "version": "0.1.0",
       "packageArguments": [
         {
@@ -98,7 +98,7 @@
         },
         {
           "name": "ZENODO_ACCESS_TOKEN",
-          "description": "Optional Zenodo personal access token for higher rate limits (100 req/min vs 60 req/min anonymous).",
+          "description": "Optional Zenodo personal access token, created with no scopes. Raises Zenodo's rate limit from 60 to 100 requests per minute; searches stay at 25 per minute.",
           "format": "string",
           "isRequired": false,
           "isSecret": true
