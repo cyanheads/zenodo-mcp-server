@@ -1,0 +1,60 @@
+{
+  "entries": [
+    {
+      "key": "monthly_shapes_0_20/ID_378092.tif",
+      "size": 18808,
+      "compressed_size": 6796,
+      "mimetype": "image/tiff",
+      "crc": 2045737468
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378089.tif",
+      "size": 19088,
+      "compressed_size": 7730,
+      "mimetype": "image/tiff",
+      "crc": 2243923406
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378091.tif",
+      "size": 20576,
+      "compressed_size": 7604,
+      "mimetype": "image/tiff",
+      "crc": 2174671074
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378090.tif",
+      "size": 25984,
+      "compressed_size": 14006,
+      "mimetype": "image/tiff",
+      "crc": 526157368
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378094.tif",
+      "size": 28752,
+      "compressed_size": 17886,
+      "mimetype": "image/tiff",
+      "crc": 2753117839
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378088.tif",
+      "size": 18840,
+      "compressed_size": 6587,
+      "mimetype": "image/tiff",
+      "crc": 3459556777
+    },
+    {
+      "key": "monthly_shapes_0_20/ID_378093.tif",
+      "size": 24600,
+      "compressed_size": 13439,
+      "mimetype": "image/tiff",
+      "crc": 3839284153
+    }
+  ],
+  "directories": [
+    {
+      "key": "monthly_shapes_0_20"
+    }
+  ],
+  "total": 7,
+  "truncated": false
+}

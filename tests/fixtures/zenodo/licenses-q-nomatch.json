@@ -1,0 +1,8 @@
+{
+  "hits": { "hits": [], "total": 0 },
+  "sortBy": "bestmatch",
+  "page": 1,
+  "links": {
+    "self": "https://zenodo.org/api/vocabularies/licenses?page=1&q=zzqqxxnomatch&size=3&sort=bestmatch"
+  }
+}

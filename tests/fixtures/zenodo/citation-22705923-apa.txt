@@ -1,0 +1,1 @@
+The scikit-learn developers. (2026). scikit-learn (Version 1.9.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22705923

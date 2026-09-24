@@ -1,0 +1,53 @@
+{
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "id": "00k4n6c32::101135562",
+        "title": {
+          "en": "Securing local supplY chains via the development of new Methods to assess the circularity and symbiosis of the Bio-bAsed industrial ecosystem enhancing the EU competitiveness and resource independence"
+        },
+        "identifiers": [
+          {
+            "identifier": "https://cordis.europa.eu/projects/101135562",
+            "scheme": "url"
+          },
+          {
+            "identifier": "10.3030/101135562",
+            "scheme": "doi"
+          }
+        ],
+        "number": "101135562",
+        "funder": {
+          "id": "00k4n6c32",
+          "name": "European Commission"
+        },
+        "acronym": "SYMBA",
+        "program": "HORIZON.2.6",
+        "start_date": "2024-01-01",
+        "end_date": "2026-12-31"
+      },
+      {
+        "id": "00k4n6c32::899068",
+        "title": {
+          "en": "Relational Symmetry in the Baboon: towards symbols and language"
+        },
+        "identifiers": [
+          {
+            "identifier": "https://cordis.europa.eu/projects/899068",
+            "scheme": "url"
+          }
+        ],
+        "number": "899068",
+        "funder": {
+          "id": "00k4n6c32",
+          "name": "European Commission"
+        },
+        "acronym": "SymBa",
+        "program": "H2020-EU.1.3.",
+        "start_date": "2020-05-01",
+        "end_date": "2022-07-31"
+      }
+    ]
+  }
+}

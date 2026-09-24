@@ -1,0 +1,19 @@
+{
+  "status": 410,
+  "message": "Record deleted",
+  "tombstone": {
+    "note": "",
+    "removed_by": {
+      "user": "1860039"
+    },
+    "removal_date": "2026-09-19T19:02:04.838479+00:00",
+    "citation_text": "Doe, J. (2026). Evidential fault diagnosis for spacecraft health management (Version 2.0.0). Zenodo. https://doi.org/10.5281/zenodo.22705920",
+    "is_visible": true,
+    "removal_reason": {
+      "id": "retracted"
+    },
+    "deletion_policy": {
+      "id": "grace-period-v1"
+    }
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "id": "1241",
+  "revision_id": 15,
+  "parent": {
+    "id": "611096",
+    "communities": {
+      "ids": ["f0a8b890-f97a-4eb2-9eac-8b8a712d3a6c"],
+      "default": null,
+      "entries": [
+        {
+          "id": "f0a8b890-f97a-4eb2-9eac-8b8a712d3a6c",
+          "slug": "eu",
+          "metadata": {
+            "title": "EU Open Research Repository"
+          }
+        }
+      ]
+    },
+    "pids": {}
+  },
+  "versions": {
+    "is_latest": true,
+    "index": 1
+  },
+  "pids": {
+    "oai": {
+      "identifier": "oai:openaire.cern.ch:1241",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "publication-article",
+      "title": {
+        "de": "Zeitschriftenartikel",
+        "en": "Journal article"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Dabrowski, Marek",
+          "given_name": "Marek",
+          "family_name": "Dabrowski"
+        },
+        "affiliations": [
+          {
+            "name": "CASE - CENTRUM ANALIZ SPOLECZNO- EKONOMICZNYCH- FUNDACJA NAUKOWA"
+          }
+        ]
+      }
+    ],
+    "title": "What Can Arab Countries Learn From Post-communist Transition?",
+    "publisher": "Zenodo",
+    "publication_date": "2012-04-01",
+    "subjects": [
+      {
+        "subject": "Caucasus and Central Asia"
+      },
+      {
+        "subject": "Eastern Europe"
+      },
+      {
+        "subject": "Middle East and North Africa"
+      },
+      {
+        "subject": "Post-communist transition and development issues"
+      }
+    ],
+    "description": "The commentary by Marek Dabrowski on what Arab countries can learn from the post-communist transition of the early 1990s, after the political uprisings against the authoritarian regimes in the Arab world.",
+    "funding": [
+      {
+        "funder": {
+          "id": "00k4n6c32",
+          "name": "European Commission"
+        },
+        "award": {
+          "id": "00k4n6c32::244578",
+          "number": "244578",
+          "title": {
+            "en": "Prospective Analysis for the Mediterranean Region"
+          },
+          "identifiers": [
+            {
+              "identifier": "https://cordis.europa.eu/projects/244578",
+              "scheme": "url"
+            }
+          ],
+          "acronym": "MEDPRO",
+          "program": "FP7-SSH"
+        }
+      }
+    ]
+  },
+  "custom_fields": {
+    "journal:journal": {
+      "title": "CASE Network E-briefs No. 09/2012"
+    }
+  },
+  "access": {
+    "record": "public",
+    "files": "public",
+    "embargo": {
+      "active": false,
+      "reason": null
+    },
+    "status": "open"
+  },
+  "files": {
+    "enabled": true,
+    "order": [],
+    "count": 1,
+    "total_bytes": 152118,
+    "entries": {
+      "2012-09_Dabrowski.pdf": {
+        "checksum": "md5:3bc1ef98e4e63aa5fd75aeb48646e030",
+        "ext": "pdf",
+        "key": "2012-09_Dabrowski.pdf",
+        "mimetype": "application/pdf",
+        "size": 152118
+      }
+    }
+  },
+  "stats": {
+    "this_version": {
+      "views": 151,
+      "unique_views": 145,
+      "downloads": 123,
+      "unique_downloads": 123,
+      "data_volume": 18710514.0
+    },
+    "all_versions": {
+      "views": 151,
+      "unique_views": 145,
+      "downloads": 123,
+      "unique_downloads": 123,
+      "data_volume": 18710514.0
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "01cwqze88",
+  "title": {
+    "en": "National Institutes of Health"
+  },
+  "name": "National Institutes of Health",
+  "country": "US",
+  "country_name": "United States",
+  "location_name": "Bethesda",
+  "identifiers": [
+    {
+      "identifier": "01cwqze88",
+      "scheme": "ror"
+    },
+    {
+      "identifier": "10.13039/100000002",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "grid.94365.3d",
+      "scheme": "grid"
+    },
+    {
+      "identifier": "0000 0001 2297 5165",
+      "scheme": "isni"
+    }
+  ],
+  "acronym": "NIH",
+  "status": "active",
+  "types": ["government", "funder"]
+}

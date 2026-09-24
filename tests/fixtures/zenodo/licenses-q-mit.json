@@ -1,0 +1,46 @@
+{
+  "hits": {
+    "total": 11,
+    "hits": [
+      {
+        "id": "mit",
+        "title": {
+          "en": "MIT License"
+        },
+        "tags": ["recommended", "all", "software"],
+        "props": {
+          "url": "https://opensource.org/licenses/MIT",
+          "scheme": "spdx",
+          "osi_approved": "y"
+        },
+        "type": "licenses"
+      },
+      {
+        "id": "aml",
+        "title": {
+          "en": "Apple MIT License"
+        },
+        "tags": ["all", "software"],
+        "props": {
+          "url": "https://fedoraproject.org/wiki/Licensing/Apple_MIT_License",
+          "scheme": "spdx",
+          "osi_approved": ""
+        },
+        "type": "licenses"
+      },
+      {
+        "id": "mit-0",
+        "title": {
+          "en": "MIT No Attribution"
+        },
+        "tags": ["all", "software"],
+        "props": {
+          "url": "https://github.com/aws/mit-0",
+          "scheme": "spdx",
+          "osi_approved": "y"
+        },
+        "type": "licenses"
+      }
+    ]
+  }
+}

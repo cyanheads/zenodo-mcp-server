@@ -1,0 +1,143 @@
+{
+  "id": "22705923",
+  "revision_id": 4,
+  "parent": {
+    "id": "591564",
+    "communities": {},
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.591564",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    }
+  },
+  "versions": {
+    "is_latest": true,
+    "index": 47
+  },
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.22705923",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:22705923",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "software",
+      "title": {
+        "de": "Software",
+        "en": "Software"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "The scikit-learn developers",
+          "family_name": "The scikit-learn developers"
+        }
+      }
+    ],
+    "title": "scikit-learn",
+    "publisher": "Zenodo",
+    "publication_date": "2026-09-11",
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/scikit-learn/scikit-learn/tree/1.9.1",
+        "scheme": "url",
+        "relation_type": {
+          "id": "issupplementto",
+          "title": {
+            "de": "Ergänzt",
+            "en": "Is supplement to"
+          }
+        },
+        "resource_type": {
+          "id": "software",
+          "title": {
+            "de": "Software",
+            "en": "Software"
+          }
+        }
+      }
+    ],
+    "version": "1.9.1",
+    "rights": [
+      {
+        "id": "bsd-3-clause",
+        "title": {
+          "en": "BSD 3-Clause \"New\" or \"Revised\" License"
+        },
+        "description": {
+          "en": ""
+        },
+        "props": {
+          "url": "https://opensource.org/licenses/BSD-3-Clause",
+          "scheme": "spdx"
+        }
+      }
+    ],
+    "description": "<p>We're happy to announce the 1.9.1 release.</p>\n<p>This release contains a few bug fixes and is the first version supporting Python 3.15.</p>\n<p>You can see the changelog here: https://scikit-learn.org/stable/whats_new/v1.9.html#version-1-9-1</p>\n<p>You can upgrade with pip as usual:</p>\n<pre><code>pip install -U scikit-learn\n</code></pre>\n<p>The conda-forge builds can be installed using:</p>\n<pre><code>conda install -c conda-forge scikit-learn\n</code></pre>\n<p>Thanks to everyone who contributed to this release !</p>",
+    "additional_descriptions": [
+      {
+        "description": "If you use scikit-learn in a scientific publication, we would appreciate citations to the following paper:",
+        "type": {
+          "id": "notes",
+          "title": {
+            "de": "Anmerkungen",
+            "en": "Notes"
+          }
+        }
+      }
+    ]
+  },
+  "custom_fields": {
+    "code:codeRepository": "https://github.com/scikit-learn/scikit-learn"
+  },
+  "access": {
+    "record": "public",
+    "files": "public",
+    "embargo": {
+      "active": false,
+      "reason": null
+    },
+    "status": "open"
+  },
+  "files": {
+    "enabled": true,
+    "order": [],
+    "count": 1,
+    "total_bytes": 8684206,
+    "entries": {
+      "scikit-learn/scikit-learn-1.9.1.zip": {
+        "checksum": "md5:63498a22114ec6465a79e4d00774cc00",
+        "ext": "zip",
+        "key": "scikit-learn/scikit-learn-1.9.1.zip",
+        "mimetype": "application/zip",
+        "size": 8684206
+      }
+    }
+  },
+  "stats": {
+    "this_version": {
+      "views": 68,
+      "unique_views": 64,
+      "downloads": 6,
+      "unique_downloads": 6,
+      "data_volume": 52105236.0
+    },
+    "all_versions": {
+      "views": 23896,
+      "unique_views": 22820,
+      "downloads": 2913,
+      "unique_downloads": 2768,
+      "data_volume": 23244213041.0
+    }
+  }
+}

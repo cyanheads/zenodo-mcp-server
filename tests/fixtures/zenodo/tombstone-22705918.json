@@ -1,0 +1,16 @@
+{
+  "status": 410,
+  "message": "Record deleted",
+  "tombstone": {
+    "note": "User was blocked",
+    "removed_by": {
+      "user": "system"
+    },
+    "removal_date": "2026-09-11T10:30:41.939980+00:00",
+    "citation_text": "Doe, J. (2026). A removed spam deposit. Zenodo. https://doi.org/10.5281/zenodo.22705918",
+    "is_visible": true,
+    "removal_reason": {
+      "id": "spam"
+    }
+  }
+}

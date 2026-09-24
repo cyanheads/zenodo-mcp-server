@@ -1,0 +1,82 @@
+{
+  "id": "22931068",
+  "revision_id": 4,
+  "parent": {
+    "id": "22884306",
+    "communities": {},
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.22884306",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    }
+  },
+  "versions": {
+    "is_latest": false,
+    "index": 28
+  },
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.22931068",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:22931068",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "publication-preprint",
+      "title": {
+        "de": "Preprint",
+        "en": "Preprint"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Castro Rouanet, Jonathan Federico",
+          "given_name": "Jonathan Federico",
+          "family_name": "Castro Rouanet"
+        }
+      }
+    ],
+    "title": "Estructura de los números primos y su conexión exacta con los ceros de Riemann",
+    "publisher": "Zenodo",
+    "publication_date": "2026-09-24",
+    "description": "<p>Documento de trabajo. Se establece una descomposici&oacute;n exacta del conteo de los<br>n&uacute;meros primos en dos partes &mdash;una componente de densidad, en forma cerrada, y una<br>componente de fluctuaci&oacute;n&mdash; y se muestra que esta segunda parte coincide con el<br>objeto descrito por los ceros no triviales de la funci&oacute;n zeta de Riemann. El<br>n-&eacute;simo primo se obtiene de forma exacta por esta v&iacute;a. Cada afirmaci&oacute;n va con su<br>derivaci&oacute;n paso a paso y con el c&oacute;digo que la reproduce. Acceso restringido;<br>registro con fines de fecha y autor&iacute;a.</p>"
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "restricted",
+    "embargo": {
+      "active": false,
+      "reason": null
+    },
+    "status": "restricted"
+  },
+  "files": {
+    "enabled": true
+  },
+  "stats": {
+    "this_version": {
+      "views": 1,
+      "unique_views": 1,
+      "downloads": 0,
+      "unique_downloads": 0,
+      "data_volume": 0.0
+    },
+    "all_versions": {
+      "views": 49,
+      "unique_views": 43,
+      "downloads": 0,
+      "unique_downloads": 0,
+      "data_volume": 0.0
+    }
+  }
+}

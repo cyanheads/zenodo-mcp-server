@@ -1,0 +1,165 @@
+{
+  "id": "22917909",
+  "revision_id": 4,
+  "parent": {
+    "id": "7125598",
+    "communities": {},
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.7125598",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    }
+  },
+  "versions": {
+    "is_latest": true,
+    "index": 1366
+  },
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.22917909",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:22917909",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "dataset",
+      "title": {
+        "de": "Datensatz",
+        "en": "Dataset"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "organizational",
+          "name": "Robert Koch-Institut",
+          "identifiers": [
+            {
+              "identifier": "01k5qnb77",
+              "scheme": "ror"
+            }
+          ]
+        }
+      }
+    ],
+    "title": "Intensivkapazitäten und COVID-19-Intensivbettenbelegung in Deutschland",
+    "publisher": "Zenodo",
+    "publication_date": "2026-09-23",
+    "version": "2026-09-23",
+    "rights": [
+      {
+        "id": "cc-by-4.0",
+        "title": {
+          "en": "Creative Commons Attribution 4.0 International"
+        },
+        "props": {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+          "scheme": "spdx"
+        }
+      }
+    ]
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "public",
+    "embargo": {
+      "active": false,
+      "reason": null
+    },
+    "status": "open"
+  },
+  "files": {
+    "enabled": true,
+    "default_preview": "[Dokumentation]_Intensivkapazitaeten_und_COVID-19-Intensivbettenbelegung_in_Deutschland.pdf",
+    "order": [],
+    "count": 9,
+    "total_bytes": 56245731,
+    "entries": {
+      "Intensivregister_Deutschland_Versorgungsstufen.csv": {
+        "checksum": "md5:4a04f43476b2002ae0b51e09e9380bc1",
+        "ext": "csv",
+        "size": 363541,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Deutschland_Versorgungsstufen.csv"
+      },
+      "Intensivregister_Deutschland_Altersgruppen.csv": {
+        "checksum": "md5:7952a0d93a7680ad513926def1c33de6",
+        "ext": "csv",
+        "size": 83958,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Deutschland_Altersgruppen.csv"
+      },
+      "Intensivregister_Deutschland_Covid_Versorgungsart.csv": {
+        "checksum": "md5:0f2e5239ef94ba5393fd669004a92d9b",
+        "ext": "csv",
+        "size": 47601,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Deutschland_Covid_Versorgungsart.csv"
+      },
+      "datapackage.json": {
+        "checksum": "md5:c01644767fdb3ab389f33c3508d780ec",
+        "ext": "json",
+        "size": 2615,
+        "mimetype": "application/json",
+        "key": "datapackage.json"
+      },
+      "Intensivregister_Bundeslaender_Kapazitaeten.csv": {
+        "checksum": "md5:83ff986c1206835783c11d9df95a69fd",
+        "ext": "csv",
+        "size": 3704592,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Bundeslaender_Kapazitaeten.csv"
+      },
+      "Intensivregister_Deutschland_Kapazitaeten.csv": {
+        "checksum": "md5:e310e06669d5db9433c0fe459274d832",
+        "ext": "csv",
+        "size": 703910,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Deutschland_Kapazitaeten.csv"
+      },
+      "Intensivregister_Landkreise_Kapazitaeten.csv": {
+        "checksum": "md5:1027a3da0a2def29670235b4820be03e",
+        "ext": "csv",
+        "size": 51112386,
+        "mimetype": "text/csv",
+        "key": "Intensivregister_Landkreise_Kapazitaeten.csv"
+      },
+      "[Dokumentation]_Intensivkapazitaeten_und_COVID-19-Intensivbettenbelegung_in_Deutschland.pdf": {
+        "checksum": "md5:724f938aa7497e84a0f6321c9f1ec4dc",
+        "ext": "pdf",
+        "size": 205594,
+        "mimetype": "application/pdf",
+        "key": "[Dokumentation]_Intensivkapazitaeten_und_COVID-19-Intensivbettenbelegung_in_Deutschland.pdf"
+      },
+      "Metadaten.zip": {
+        "checksum": "md5:8e7444a67bd5c0f7c251bfa45637c8d4",
+        "ext": "zip",
+        "size": 21534,
+        "mimetype": "application/zip",
+        "key": "Metadaten.zip"
+      }
+    }
+  },
+  "stats": {
+    "this_version": {
+      "views": 38,
+      "unique_views": 30,
+      "downloads": 50,
+      "unique_downloads": 48
+    },
+    "all_versions": {
+      "views": 123955,
+      "unique_views": 120916,
+      "downloads": 282662,
+      "unique_downloads": 272711
+    }
+  }
+}

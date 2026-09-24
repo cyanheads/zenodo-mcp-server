@@ -1,0 +1,225 @@
+{
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "id": "15308258",
+        "revision_id": 4,
+        "parent": {
+          "id": "15308257",
+          "communities": {},
+          "pids": {}
+        },
+        "versions": {
+          "is_latest": true,
+          "index": 1
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.3897/ap.e134190",
+            "provider": "external"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:15308258",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "publication-article",
+            "title": {
+              "de": "Zeitschriftenartikel",
+              "en": "Journal article"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "personal",
+                "name": "Stoychev, Vassil",
+                "given_name": "Vassil",
+                "family_name": "Stoychev"
+              },
+              "affiliations": [
+                {
+                  "name": "Institute of Agricultural Economics, Sofia, Bulgaria"
+                }
+              ]
+            }
+          ],
+          "title": "Representing competitiveness of Bulgarian dairy production",
+          "publisher": "Pensoft Publishers",
+          "publication_date": "2025-04-28",
+          "subjects": [
+            {
+              "subject": "milk"
+            },
+            {
+              "subject": "dairy products"
+            },
+            {
+              "subject": "competitiveness index"
+            }
+          ],
+          "rights": [
+            {
+              "id": "cc-by-4.0",
+              "title": {
+                "en": "Creative Commons Attribution 4.0 International"
+              },
+              "description": {
+                "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
+              },
+              "icon": "cc-by-icon",
+              "props": {
+                "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+                "scheme": "spdx"
+              }
+            }
+          ],
+          "description": "<p>Bulgarian dairy production makes up a significant portion of the overall agricultural sector&#39;s production (12% in 2021). The study reveals its development and quantifies sectoral competitive performance. The period under review began after Bulgaria acceded to the EU in 2007. Canada&#39;s Task Force for Competitiveness in the Agri-Food Sector developed a theoretical framework, defined as &quot;the sustained ability to profitably gain and maintain market share&quot; (Martin et al. 1991), which forms the basis of the method&#39;s concept. </p><p>The study aims to investigate the development of the Bulgarian milk sector&#39;s competitiveness (including dairy, sheep, goat, and buffalo milk and products). An index of competitiveness was developed and applied, comprising of two components: market performance and value generated. The results synthesize competitive performance on internal and external markets, showing a sustainable competitiveness decline through the examined period. </p>"
+        },
+        "custom_fields": {
+          "journal:journal": {
+            "title": "ARPHA Proceedings",
+            "issue": "",
+            "volume": "8",
+            "pages": "1-9"
+          }
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 2,
+          "total_bytes": 588297,
+          "entries": {
+            "AP_article_134190.pdf": {
+              "checksum": "md5:4212404d9ea4da7f059861a29c6637bf",
+              "ext": "pdf",
+              "key": "AP_article_134190.pdf",
+              "mimetype": "application/pdf",
+              "size": 583075
+            },
+            "AP_article_134190.xml": {
+              "checksum": "md5:f8fc7a4ff752e3f2911741ee411ee4db",
+              "ext": "xml",
+              "key": "AP_article_134190.xml",
+              "mimetype": "text/xml",
+              "size": 5222
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 23,
+            "unique_views": 23,
+            "downloads": 43,
+            "unique_downloads": 39,
+            "data_volume": 18137989.0
+          },
+          "all_versions": {
+            "views": 23,
+            "unique_views": 23,
+            "downloads": 43,
+            "unique_downloads": 39,
+            "data_volume": 18137989.0
+          }
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "publication_date": {
+      "buckets": [
+        {
+          "key": "2025",
+          "doc_count": 1,
+          "label": "2025",
+          "is_selected": false
+        }
+      ],
+      "label": "Publication date"
+    },
+    "access_status": {
+      "buckets": [
+        {
+          "key": "open",
+          "doc_count": 1,
+          "label": "Open",
+          "is_selected": false
+        }
+      ],
+      "label": "Access status"
+    },
+    "resource_type": {
+      "buckets": [
+        {
+          "key": "publication",
+          "doc_count": 1,
+          "label": "Publication",
+          "is_selected": false,
+          "inner": {
+            "buckets": [
+              {
+                "key": "publication-article",
+                "doc_count": 1,
+                "label": "Journal article",
+                "is_selected": false
+              }
+            ]
+          }
+        }
+      ],
+      "label": "Resource types"
+    },
+    "subject": {
+      "buckets": [
+        {
+          "key": "competitiveness index",
+          "doc_count": 1,
+          "label": "competitiveness index",
+          "is_selected": false
+        },
+        {
+          "key": "dairy products",
+          "doc_count": 1,
+          "label": "dairy products",
+          "is_selected": false
+        },
+        {
+          "key": "milk",
+          "doc_count": 1,
+          "label": "milk",
+          "is_selected": false
+        }
+      ],
+      "label": "Subjects"
+    },
+    "file_type": {
+      "buckets": [
+        {
+          "key": "pdf",
+          "doc_count": 1,
+          "label": "PDF",
+          "is_selected": false
+        },
+        {
+          "key": "xml",
+          "doc_count": 1,
+          "label": "XML",
+          "is_selected": false
+        }
+      ],
+      "label": "File type"
+    }
+  }
+}

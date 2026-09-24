@@ -1,0 +1,91 @@
+{
+  "hits": {
+    "total": 30,
+    "hits": [
+      {
+        "id": "022awwm23",
+        "title": {
+          "en": "Wellcome Collection"
+        },
+        "name": "Wellcome Collection",
+        "country": "GB",
+        "country_name": "United Kingdom",
+        "location_name": "London",
+        "identifiers": [
+          {
+            "identifier": "022awwm23",
+            "scheme": "ror"
+          },
+          {
+            "identifier": "grid.438963.3",
+            "scheme": "grid"
+          },
+          {
+            "identifier": "0000 0001 1703 1450",
+            "scheme": "isni"
+          }
+        ],
+        "status": "active",
+        "types": ["archive"]
+      },
+      {
+        "id": "029chgv08",
+        "title": {
+          "en": "Wellcome Trust"
+        },
+        "name": "Wellcome Trust",
+        "country": "GB",
+        "country_name": "United Kingdom",
+        "location_name": "London",
+        "identifiers": [
+          {
+            "identifier": "029chgv08",
+            "scheme": "ror"
+          },
+          {
+            "identifier": "10.13039/100010269",
+            "scheme": "doi"
+          },
+          {
+            "identifier": "grid.52788.30",
+            "scheme": "grid"
+          },
+          {
+            "identifier": "0000 0004 0427 7672",
+            "scheme": "isni"
+          }
+        ],
+        "acronym": "WT",
+        "aliases": ["Wellcome"],
+        "status": "active",
+        "types": ["funder", "nonprofit"]
+      },
+      {
+        "id": "05hde1z07",
+        "title": {
+          "en": "Wellcome Library"
+        },
+        "name": "Wellcome Library",
+        "country": "GB",
+        "country_name": "United Kingdom",
+        "location_name": "London",
+        "identifiers": [
+          {
+            "identifier": "05hde1z07",
+            "scheme": "ror"
+          },
+          {
+            "identifier": "grid.502976.f",
+            "scheme": "grid"
+          },
+          {
+            "identifier": "0000 0001 2299 5297",
+            "scheme": "isni"
+          }
+        ],
+        "status": "inactive",
+        "types": ["archive"]
+      }
+    ]
+  }
+}

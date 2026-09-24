@@ -1,0 +1,164 @@
+{
+  "id": "22837418",
+  "revision_id": 4,
+  "parent": {
+    "id": "22018834",
+    "communities": {},
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.22018834",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    }
+  },
+  "versions": {
+    "is_latest": true,
+    "index": 2
+  },
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.22837418",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:22837418",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "publication-report",
+      "title": {
+        "de": "Bericht",
+        "en": "Report"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Jalali, Mirarmia",
+          "given_name": "Mirarmia",
+          "family_name": "Jalali",
+          "identifiers": [
+            {
+              "identifier": "0009-0009-2329-9117",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "role": {
+          "id": "researcher",
+          "title": {
+            "de": "WissenschaftlerIn",
+            "en": "Researcher"
+          }
+        },
+        "affiliations": [
+          {
+            "id": "04zjtrb98",
+            "name": "Old Dominion University",
+            "identifiers": [
+              {
+                "identifier": "04zjtrb98",
+                "scheme": "ror"
+              },
+              {
+                "identifier": "grid.261368.8",
+                "scheme": "grid"
+              },
+              {
+                "identifier": "0000 0001 2164 3177",
+                "scheme": "isni"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "title": "MOSDE: Two-Stage Pre-Registration of a Pre-Specified Empirical Asset-Pricing Study — Stage B (Sealed until Manuscript Submission)",
+    "publisher": "Zenodo",
+    "publication_date": "2026-09-18",
+    "subjects": [
+      {
+        "subject": "pre-registration"
+      },
+      {
+        "subject": "empirical asset pricing"
+      },
+      {
+        "subject": "machine learning"
+      }
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/armia1989/mosde-registration",
+        "scheme": "url",
+        "relation_type": {
+          "id": "issupplementedby",
+          "title": {
+            "de": "Wird ergänzt durch",
+            "en": "Is supplemented by"
+          }
+        },
+        "resource_type": {
+          "id": "software",
+          "title": {
+            "de": "Software",
+            "en": "Software"
+          }
+        }
+      }
+    ],
+    "version": "Stage B",
+    "rights": [
+      {
+        "id": "cc-by-nc-nd-4.0",
+        "title": {
+          "en": "Creative Commons Attribution Non Commercial No Derivatives 4.0 International"
+        },
+        "description": {
+          "en": ""
+        },
+        "icon": "cc-by-nc-nd-icon",
+        "props": {
+          "url": "https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode",
+          "scheme": "spdx"
+        }
+      }
+    ],
+    "description": "<p>This record is the sealed two-stage pre-registration of MOSDE, a pre-specified, single-author empirical asset-pricing study. Version 1 (Stage A) was deposited after the study's synthetic calibration phase and before any real-data modeling. This version (Stage B) is deposited after the real-data pilot and its calibration phase and before any confirmatory computation; it freezes the confirmatory "
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "restricted",
+    "embargo": {
+      "active": true,
+      "until": "2035-08-31",
+      "reason": "Design documents sealed until manuscript submission; the record's metadata, description, and deposit timestamp are public and serve as the registration anchor."
+    },
+    "status": "embargoed"
+  },
+  "files": {
+    "enabled": true
+  },
+  "stats": {
+    "this_version": {
+      "views": 0,
+      "unique_views": 0,
+      "downloads": 0,
+      "unique_downloads": 0,
+      "data_volume": 0.0
+    },
+    "all_versions": {
+      "views": 18,
+      "unique_views": 11,
+      "downloads": 2,
+      "unique_downloads": 2,
+      "data_volume": 9567.0
+    }
+  }
+}

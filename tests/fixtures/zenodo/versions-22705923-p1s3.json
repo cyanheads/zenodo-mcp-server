@@ -1,0 +1,276 @@
+{
+  "hits": {
+    "hits": [
+      {
+        "id": "22705923",
+        "revision_id": 4,
+        "parent": {
+          "id": "591564",
+          "pids": {
+            "doi": {
+              "identifier": "10.5281/zenodo.591564",
+              "provider": "datacite",
+              "client": "datacite"
+            }
+          }
+        },
+        "versions": {
+          "is_latest": true,
+          "index": 47
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.5281/zenodo.22705923",
+            "provider": "datacite",
+            "client": "datacite"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:22705923",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "software",
+            "title": {
+              "de": "Software",
+              "en": "Software"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "personal",
+                "name": "The scikit-learn developers",
+                "family_name": "The scikit-learn developers"
+              }
+            }
+          ],
+          "title": "scikit-learn",
+          "publication_date": "2026-09-11",
+          "version": "1.9.1"
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 1,
+          "total_bytes": 8684206,
+          "entries": {
+            "scikit-learn/scikit-learn-1.9.1.zip": {
+              "checksum": "md5:63498a22114ec6465a79e4d00774cc00",
+              "ext": "zip",
+              "size": 8684206,
+              "mimetype": "application/zip",
+              "key": "scikit-learn/scikit-learn-1.9.1.zip"
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 68,
+            "unique_views": 64,
+            "downloads": 6,
+            "unique_downloads": 6
+          },
+          "all_versions": {
+            "views": 23896,
+            "unique_views": 22820,
+            "downloads": 2913,
+            "unique_downloads": 2768
+          }
+        }
+      },
+      {
+        "id": "20510517",
+        "revision_id": 4,
+        "parent": {
+          "id": "591564",
+          "pids": {
+            "doi": {
+              "identifier": "10.5281/zenodo.591564",
+              "provider": "datacite",
+              "client": "datacite"
+            }
+          }
+        },
+        "versions": {
+          "is_latest": false,
+          "index": 46
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.5281/zenodo.20510517",
+            "provider": "datacite",
+            "client": "datacite"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:20510517",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "software",
+            "title": {
+              "de": "Software",
+              "en": "Software"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "personal",
+                "name": "The scikit-learn developers",
+                "family_name": "The scikit-learn developers"
+              }
+            }
+          ],
+          "title": "scikit-learn",
+          "publication_date": "2026-06-02",
+          "version": "1.9.0"
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 1,
+          "total_bytes": 8635739,
+          "entries": {
+            "scikit-learn/scikit-learn-1.9.0.zip": {
+              "checksum": "md5:71cad6cdbfc5ae844cc15359a55d7d45",
+              "ext": "zip",
+              "size": 8635739,
+              "mimetype": "application/zip",
+              "key": "scikit-learn/scikit-learn-1.9.0.zip"
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 1137,
+            "unique_views": 1123,
+            "downloads": 127,
+            "unique_downloads": 127
+          },
+          "all_versions": {
+            "views": 23896,
+            "unique_views": 22820,
+            "downloads": 2913,
+            "unique_downloads": 2768
+          }
+        }
+      },
+      {
+        "id": "17880109",
+        "revision_id": 4,
+        "parent": {
+          "id": "591564",
+          "pids": {
+            "doi": {
+              "identifier": "10.5281/zenodo.591564",
+              "provider": "datacite",
+              "client": "datacite"
+            }
+          }
+        },
+        "versions": {
+          "is_latest": false,
+          "index": 45
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.5281/zenodo.17880109",
+            "provider": "datacite",
+            "client": "datacite"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:17880109",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "software",
+            "title": {
+              "de": "Software",
+              "en": "Software"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "personal",
+                "name": "The scikit-learn developers",
+                "family_name": "The scikit-learn developers"
+              }
+            }
+          ],
+          "title": "scikit-learn",
+          "publication_date": "2025-12-10",
+          "version": "1.8.0"
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 1,
+          "total_bytes": 8198446,
+          "entries": {
+            "scikit-learn/scikit-learn-1.8.0.zip": {
+              "checksum": "md5:4f8847a8e21c473b78167f15f555caf9",
+              "ext": "zip",
+              "size": 8198446,
+              "mimetype": "application/zip",
+              "key": "scikit-learn/scikit-learn-1.8.0.zip"
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 1846,
+            "unique_views": 1786,
+            "downloads": 146,
+            "unique_downloads": 143
+          },
+          "all_versions": {
+            "views": 23896,
+            "unique_views": 22820,
+            "downloads": 2913,
+            "unique_downloads": 2768
+          }
+        }
+      }
+    ],
+    "total": 47
+  },
+  "links": {
+    "self": "https://zenodo.org/api/records/22705923/versions?page=1&size=3&sort=version",
+    "next": "https://zenodo.org/api/records/22705923/versions?page=2&size=3&sort=version"
+  },
+  "sortBy": "version"
+}

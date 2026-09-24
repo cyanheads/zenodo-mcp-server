@@ -1,0 +1,11 @@
+{
+  "hits": {
+    "hits": [],
+    "total": 47
+  },
+  "links": {
+    "prev": "https://zenodo.org/api/records/22705923/versions?page=2&size=25&sort=version",
+    "self": "https://zenodo.org/api/records/22705923/versions?page=3&size=25&sort=version"
+  },
+  "sortBy": "version"
+}

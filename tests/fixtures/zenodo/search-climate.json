@@ -1,0 +1,716 @@
+{
+  "hits": {
+    "hits": [
+      {
+        "id": "16537543",
+        "revision_id": 4,
+        "parent": {
+          "id": "16537542",
+          "communities": {
+            "entries": [
+              {
+                "id": "09369e2d-6fa3-45bc-a92b-64fa8757f144",
+                "slug": "symbaproject",
+                "metadata": {
+                  "title": "SYMBA Project"
+                }
+              },
+              {
+                "id": "f0a8b890-f97a-4eb2-9eac-8b8a712d3a6c",
+                "slug": "eu",
+                "metadata": {
+                  "title": "EU Open Research Repository"
+                }
+              }
+            ]
+          },
+          "pids": {
+            "doi": {
+              "identifier": "10.5281/zenodo.16537542",
+              "provider": "datacite",
+              "client": "datacite"
+            }
+          }
+        },
+        "versions": {
+          "is_latest": true,
+          "index": 1
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.5281/zenodo.16537543",
+            "provider": "datacite",
+            "client": "datacite"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:16537543",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "publication-deliverable",
+            "title": {
+              "de": "Projektergebnis",
+              "en": "Project deliverable"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "organizational",
+                "name": "CLIMATE KIC"
+              }
+            }
+          ],
+          "title": "SYMBA D6.1 - Report on system mapping and SYMBA forum activities",
+          "publisher": "Zenodo",
+          "publication_date": "2025-07-28",
+          "rights": [
+            {
+              "id": "cc-by-4.0",
+              "title": {
+                "en": "Creative Commons Attribution 4.0 International"
+              },
+              "props": {
+                "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+                "scheme": "spdx"
+              }
+            }
+          ],
+          "description": "<p>A report summarizing the SYMBA forum and cross-exchange activities with ongoing EU projects and&nbsp;initiatives such as elaboration of a collaborative strategy, organization of 2 interactive workshops.</p>",
+          "funding": [
+            {
+              "funder": {
+                "id": "00k4n6c32",
+                "name": "European Commission"
+              },
+              "award": {
+                "id": "00k4n6c32::101135562",
+                "number": "101135562",
+                "title": {
+                  "en": "Securing local supplY chains via the development of new Meth"
+                },
+                "identifiers": [
+                  {
+                    "identifier": "https://cordis.europa.eu/projects/101135562",
+                    "scheme": "url"
+                  },
+                  {
+                    "identifier": "10.3030/101135562",
+                    "scheme": "doi"
+                  }
+                ],
+                "acronym": "SYMBA",
+                "program": "HORIZON.2.6"
+              }
+            }
+          ]
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 1,
+          "total_bytes": 2202807,
+          "entries": {
+            "D6.1 (versione sottomessa).pdf": {
+              "checksum": "md5:c2d30d06a692ad356dd2253dccfb5084",
+              "ext": "pdf",
+              "size": 2202807,
+              "mimetype": "application/pdf",
+              "key": "D6.1 (versione sottomessa).pdf"
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 107,
+            "unique_views": 89,
+            "downloads": 367,
+            "unique_downloads": 324
+          },
+          "all_versions": {
+            "views": 107,
+            "unique_views": 89,
+            "downloads": 367,
+            "unique_downloads": 324
+          }
+        }
+      },
+      {
+        "id": "16537726",
+        "revision_id": 4,
+        "parent": {
+          "id": "16537725",
+          "communities": {
+            "entries": [
+              {
+                "id": "09369e2d-6fa3-45bc-a92b-64fa8757f144",
+                "slug": "symbaproject",
+                "metadata": {
+                  "title": "SYMBA Project"
+                }
+              },
+              {
+                "id": "f0a8b890-f97a-4eb2-9eac-8b8a712d3a6c",
+                "slug": "eu",
+                "metadata": {
+                  "title": "EU Open Research Repository"
+                }
+              }
+            ]
+          },
+          "pids": {
+            "doi": {
+              "identifier": "10.5281/zenodo.16537725",
+              "provider": "datacite",
+              "client": "datacite"
+            }
+          }
+        },
+        "versions": {
+          "is_latest": true,
+          "index": 1
+        },
+        "pids": {
+          "doi": {
+            "identifier": "10.5281/zenodo.16537726",
+            "provider": "datacite",
+            "client": "datacite"
+          },
+          "oai": {
+            "identifier": "oai:zenodo.org:16537726",
+            "provider": "oai"
+          }
+        },
+        "metadata": {
+          "resource_type": {
+            "id": "publication-deliverable",
+            "title": {
+              "de": "Projektergebnis",
+              "en": "Project deliverable"
+            }
+          },
+          "creators": [
+            {
+              "person_or_org": {
+                "type": "organizational",
+                "name": "CLIMATE KIC"
+              }
+            }
+          ],
+          "title": "SYMBA D6.3 - 1st Report on summary of New European Bauhaus activities",
+          "publisher": "Zenodo",
+          "publication_date": "2025-07-28",
+          "rights": [
+            {
+              "id": "cc-by-4.0",
+              "title": {
+                "en": "Creative Commons Attribution 4.0 International"
+              },
+              "props": {
+                "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+                "scheme": "spdx"
+              }
+            }
+          ],
+          "description": "<p>A 1st draft report with summary of the networking activities carried with the New European Bauhaus Community. It also includes the outcomes of 4 virtual meetings to share NEB updates, opportunities, events and guidance;&nbsp;3 trainings/webinar sessions on awareness and NEB; and 3 sessions of NEB coaching to SYMBA.</p>",
+          "funding": [
+            {
+              "funder": {
+                "id": "00k4n6c32",
+                "name": "European Commission"
+              },
+              "award": {
+                "id": "00k4n6c32::101135562",
+                "number": "101135562",
+                "title": {
+                  "en": "Securing local supplY chains via the development of new Meth"
+                },
+                "identifiers": [
+                  {
+                    "identifier": "https://cordis.europa.eu/projects/101135562",
+                    "scheme": "url"
+                  },
+                  {
+                    "identifier": "10.3030/101135562",
+                    "scheme": "doi"
+                  }
+                ],
+                "acronym": "SYMBA",
+                "program": "HORIZON.2.6"
+              }
+            }
+          ]
+        },
+        "access": {
+          "record": "public",
+          "files": "public",
+          "embargo": {
+            "active": false,
+            "reason": null
+          },
+          "status": "open"
+        },
+        "files": {
+          "enabled": true,
+          "order": [],
+          "count": 1,
+          "total_bytes": 1595041,
+          "entries": {
+            "D6.3 (versione sottomessa).pdf": {
+              "checksum": "md5:4dc86409f11c1237543cf74e1f48f33d",
+              "ext": "pdf",
+              "size": 1595041,
+              "mimetype": "application/pdf",
+              "key": "D6.3 (versione sottomessa).pdf"
+            }
+          }
+        },
+        "stats": {
+          "this_version": {
+            "views": 55,
+            "unique_views": 54,
+            "downloads": 321,
+            "unique_downloads": 291
+          },
+          "all_versions": {
+            "views": 55,
+            "unique_views": 54,
+            "downloads": 321,
+            "unique_downloads": 291
+          }
+        }
+      }
+    ],
+    "total": 110814
+  },
+  "aggregations": {
+    "resource_type": {
+      "buckets": [
+        {
+          "key": "publication",
+          "doc_count": 68559,
+          "label": "Publication",
+          "inner": {
+            "buckets": [
+              {
+                "key": "publication-article",
+                "doc_count": 40621,
+                "label": "Journal article"
+              },
+              {
+                "key": "publication-report",
+                "doc_count": 3785,
+                "label": "Report"
+              },
+              {
+                "key": "publication-taxonomictreatment",
+                "doc_count": 3328,
+                "label": "Taxonomic treatment"
+              },
+              {
+                "key": "publication-conferencepaper",
+                "doc_count": 2760,
+                "label": "Conference paper"
+              },
+              {
+                "key": "publication-deliverable",
+                "doc_count": 2591,
+                "label": "Project deliverable"
+              },
+              {
+                "key": "publication-preprint",
+                "doc_count": 2141,
+                "label": "Preprint"
+              },
+              {
+                "key": "publication-section",
+                "doc_count": 1712,
+                "label": "Book chapter"
+              },
+              {
+                "key": "publication-book",
+                "doc_count": 1184,
+                "label": "Book"
+              },
+              {
+                "key": "publication-other",
+                "doc_count": 1033,
+                "label": "Other"
+              },
+              {
+                "key": "publication-journal",
+                "doc_count": 935,
+                "label": "Journal"
+              }
+            ]
+          }
+        },
+        {
+          "key": "dataset",
+          "doc_count": 25532,
+          "label": "Dataset"
+        },
+        {
+          "key": "software",
+          "doc_count": 6177,
+          "label": "Software",
+          "inner": {
+            "buckets": [
+              {
+                "key": "software-computationalnotebook",
+                "doc_count": 299,
+                "label": "Computational notebook"
+              }
+            ]
+          }
+        },
+        {
+          "key": "image",
+          "doc_count": 3618,
+          "label": "Image",
+          "inner": {
+            "buckets": [
+              {
+                "key": "image-figure",
+                "doc_count": 3344,
+                "label": "Figure"
+              },
+              {
+                "key": "image-diagram",
+                "doc_count": 42,
+                "label": "Diagram"
+              },
+              {
+                "key": "image-other",
+                "doc_count": 35,
+                "label": "Other"
+              },
+              {
+                "key": "image-photo",
+                "doc_count": 20,
+                "label": "Photo"
+              },
+              {
+                "key": "image-drawing",
+                "doc_count": 18,
+                "label": "Drawing"
+              },
+              {
+                "key": "image-plot",
+                "doc_count": 10,
+                "label": "Plot"
+              }
+            ]
+          }
+        },
+        {
+          "key": "presentation",
+          "doc_count": 2821,
+          "label": "Presentation"
+        },
+        {
+          "key": "other",
+          "doc_count": 1496,
+          "label": "Other"
+        },
+        {
+          "key": "poster",
+          "doc_count": 1296,
+          "label": "Poster"
+        },
+        {
+          "key": "model",
+          "doc_count": 416,
+          "label": "Model"
+        },
+        {
+          "key": "video",
+          "doc_count": 360,
+          "label": "Video/Audio"
+        },
+        {
+          "key": "lesson",
+          "doc_count": 324,
+          "label": "Lesson"
+        }
+      ]
+    },
+    "access_status": {
+      "buckets": [
+        {
+          "key": "open",
+          "doc_count": 103276,
+          "label": "Open"
+        },
+        {
+          "key": "restricted",
+          "doc_count": 7162,
+          "label": "Restricted"
+        },
+        {
+          "key": "embargoed",
+          "doc_count": 376,
+          "label": "Embargoed"
+        }
+      ]
+    },
+    "file_type": {
+      "buckets": [
+        {
+          "key": "pdf",
+          "doc_count": 63312,
+          "label": "PDF"
+        },
+        {
+          "key": "zip",
+          "doc_count": 14321,
+          "label": "ZIP"
+        },
+        {
+          "key": "csv",
+          "doc_count": 6184,
+          "label": "CSV"
+        },
+        {
+          "key": "html",
+          "doc_count": 6089,
+          "label": "HTML"
+        },
+        {
+          "key": "txt",
+          "doc_count": 5677,
+          "label": "TXT"
+        },
+        {
+          "key": "xlsx",
+          "doc_count": 5572,
+          "label": "XLSX"
+        },
+        {
+          "key": "docx",
+          "doc_count": 3224,
+          "label": "DOCX"
+        },
+        {
+          "key": "png",
+          "doc_count": 3170,
+          "label": "PNG"
+        },
+        {
+          "key": "md",
+          "doc_count": 2481,
+          "label": "MD"
+        },
+        {
+          "key": "cdf",
+          "doc_count": 2213,
+          "label": "CDF"
+        }
+      ]
+    },
+    "subject": {
+      "buckets": [
+        {
+          "key": "Biodiversity",
+          "doc_count": 14487,
+          "label": "Biodiversity"
+        },
+        {
+          "key": "Taxonomy",
+          "doc_count": 13277,
+          "label": "Taxonomy"
+        },
+        {
+          "key": "Animalia",
+          "doc_count": 7331,
+          "label": "Animalia"
+        },
+        {
+          "key": "Arthropoda",
+          "doc_count": 3988,
+          "label": "Arthropoda"
+        },
+        {
+          "key": "climate change",
+          "doc_count": 3033,
+          "label": "climate change"
+        },
+        {
+          "key": "Chordata",
+          "doc_count": 2627,
+          "label": "Chordata"
+        },
+        {
+          "key": "Insecta",
+          "doc_count": 2380,
+          "label": "Insecta"
+        },
+        {
+          "key": "Climate change",
+          "doc_count": 1925,
+          "label": "Climate change"
+        },
+        {
+          "key": "Climate Change",
+          "doc_count": 1834,
+          "label": "Climate Change"
+        },
+        {
+          "key": "Climate",
+          "doc_count": 1572,
+          "label": "Climate"
+        }
+      ]
+    },
+    "publication_date": {
+      "buckets": [
+        {
+          "key": "2000",
+          "doc_count": 115,
+          "label": "2000"
+        },
+        {
+          "key": "2001",
+          "doc_count": 105,
+          "label": "2001"
+        },
+        {
+          "key": "2002",
+          "doc_count": 140,
+          "label": "2002"
+        },
+        {
+          "key": "2003",
+          "doc_count": 134,
+          "label": "2003"
+        },
+        {
+          "key": "2004",
+          "doc_count": 150,
+          "label": "2004"
+        },
+        {
+          "key": "2005",
+          "doc_count": 180,
+          "label": "2005"
+        },
+        {
+          "key": "2006",
+          "doc_count": 206,
+          "label": "2006"
+        },
+        {
+          "key": "2007",
+          "doc_count": 240,
+          "label": "2007"
+        },
+        {
+          "key": "2008",
+          "doc_count": 376,
+          "label": "2008"
+        },
+        {
+          "key": "2009",
+          "doc_count": 453,
+          "label": "2009"
+        },
+        {
+          "key": "2010",
+          "doc_count": 513,
+          "label": "2010"
+        },
+        {
+          "key": "2011",
+          "doc_count": 601,
+          "label": "2011"
+        },
+        {
+          "key": "2012",
+          "doc_count": 781,
+          "label": "2012"
+        },
+        {
+          "key": "2013",
+          "doc_count": 963,
+          "label": "2013"
+        },
+        {
+          "key": "2014",
+          "doc_count": 1300,
+          "label": "2014"
+        },
+        {
+          "key": "2015",
+          "doc_count": 1386,
+          "label": "2015"
+        },
+        {
+          "key": "2016",
+          "doc_count": 1830,
+          "label": "2016"
+        },
+        {
+          "key": "2017",
+          "doc_count": 2432,
+          "label": "2017"
+        },
+        {
+          "key": "2018",
+          "doc_count": 3617,
+          "label": "2018"
+        },
+        {
+          "key": "2019",
+          "doc_count": 4151,
+          "label": "2019"
+        },
+        {
+          "key": "2020",
+          "doc_count": 4865,
+          "label": "2020"
+        },
+        {
+          "key": "2021",
+          "doc_count": 7644,
+          "label": "2021"
+        },
+        {
+          "key": "2022",
+          "doc_count": 8668,
+          "label": "2022"
+        },
+        {
+          "key": "2023",
+          "doc_count": 10356,
+          "label": "2023"
+        },
+        {
+          "key": "2024",
+          "doc_count": 13942,
+          "label": "2024"
+        },
+        {
+          "key": "2025",
+          "doc_count": 22463,
+          "label": "2025"
+        },
+        {
+          "key": "2026",
+          "doc_count": 22695,
+          "label": "2026"
+        }
+      ]
+    }
+  }
+}

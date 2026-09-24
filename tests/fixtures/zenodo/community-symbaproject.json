@@ -1,0 +1,22 @@
+{
+  "id": "09369e2d-6fa3-45bc-a92b-64fa8757f144",
+  "slug": "symbaproject",
+  "metadata": {
+    "title": "SYMBA Project",
+    "type": {
+      "id": "project",
+      "title": {
+        "de": "Projekt",
+        "en": "Project"
+      }
+    },
+    "website": "https://www.symbaproject.eu/"
+  },
+  "access": {
+    "visibility": "public",
+    "members_visibility": "public",
+    "member_policy": "open",
+    "record_submission_policy": "open",
+    "review_policy": "closed"
+  }
+}

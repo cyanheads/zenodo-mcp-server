@@ -1,0 +1,101 @@
+{
+  "id": "7126368",
+  "revision_id": 14,
+  "parent": {
+    "id": "7126367",
+    "communities": {},
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.7126367",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    }
+  },
+  "versions": {
+    "is_latest": true,
+    "index": 1
+  },
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.7126368",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:7126368",
+      "provider": "oai"
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "software",
+      "title": {
+        "de": "Software",
+        "en": "Software"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Blinded Author",
+          "family_name": "Blinded Author"
+        }
+      }
+    ],
+    "title": "Service-Oriented Integration of SuperTuxKart",
+    "publisher": "Zenodo",
+    "publication_date": "2022-09-29",
+    "rights": [
+      {
+        "id": "cc-by-4.0",
+        "title": {
+          "en": "Creative Commons Attribution 4.0 International"
+        },
+        "description": {
+          "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
+        },
+        "icon": "cc-by-icon",
+        "props": {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+          "scheme": "spdx"
+        }
+      }
+    ],
+    "description": "<p>Blinded files for ICSOC 2022 demo track</p>"
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "public",
+    "embargo": {
+      "active": false,
+      "reason": null
+    },
+    "status": "metadata-only"
+  },
+  "files": {
+    "enabled": false,
+    "order": [],
+    "count": 0,
+    "total_bytes": 0,
+    "entries": {}
+  },
+  "stats": {
+    "this_version": {
+      "views": 98,
+      "unique_views": 87,
+      "downloads": 2,
+      "unique_downloads": 2,
+      "data_volume": 1621223784.0
+    },
+    "all_versions": {
+      "views": 98,
+      "unique_views": 87,
+      "downloads": 2,
+      "unique_downloads": 2,
+      "data_volume": 1621223784.0
+    }
+  }
+}
