@@ -275,7 +275,7 @@ export const listVersions = tool('zenodo_list_versions', {
     const t = result.tombstone;
     if (t) {
       lines.push(
-        `**Tombstone:** removed ${t.removal_date ?? 'on an unrecorded date'}; reason: ${t.removal_reason ? inline(t.removal_reason) : 'not given'}`,
+        `**Tombstone:** removed ${inline(t.removal_date ?? 'on an unrecorded date')}; reason: ${t.removal_reason ? inline(t.removal_reason) : 'not given'}`,
       );
       if (t.note) lines.push(quoteBlock(t.note, 'Removal note (untrusted):'));
       if (t.citation_text)
@@ -284,7 +284,7 @@ export const listVersions = tool('zenodo_list_versions', {
 
     const series = [
       result.concept_recid ? `**Concept record:** ${result.concept_recid}` : undefined,
-      result.concept_doi ? `**Concept DOI:** ${result.concept_doi}` : undefined,
+      result.concept_doi ? `**Concept DOI:** ${inline(result.concept_doi)}` : undefined,
       result.total_versions !== undefined ? `**Versions:** ${result.total_versions}` : undefined,
       result.latest_recid ? `**Latest record:** ${result.latest_recid}` : undefined,
     ].filter(Boolean);
@@ -299,7 +299,7 @@ export const listVersions = tool('zenodo_list_versions', {
         `### ${v.version ? `${inline(v.version)} — ` : ''}record ${v.recid}${v.is_latest ? ' (latest)' : ''}`,
         `**Title:** ${inline(v.title)}`,
         [
-          v.doi ? `**DOI:** ${v.doi}` : undefined,
+          v.doi ? `**DOI:** ${inline(v.doi)}` : undefined,
           v.publication_date ? `**Published:** ${inline(v.publication_date)}` : undefined,
           v.index !== undefined ? `**Index:** ${v.index}` : undefined,
           v.is_latest !== undefined ? `**Latest:** ${v.is_latest}` : undefined,

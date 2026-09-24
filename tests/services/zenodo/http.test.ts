@@ -218,6 +218,80 @@ describe('request construction', () => {
   });
 });
 
+describe('redirects', () => {
+  it('follows a zenodo.org redirect itself, with the token still attached', async () => {
+    const authed = new ZenodoHttp({ accessToken: 'tok-123', userAgent: UA });
+    fm.route(
+      {
+        match: onPath('/records/591564'),
+        respond: () =>
+          textResponse(null, 302, { location: 'https://zenodo.org/api/records/22705923' }),
+      },
+      { match: onPath('/records/22705923'), respond: () => jsonResponse({ id: '22705923' }) },
+    );
+    try {
+      const body = await authed.request(
+        recordReq('591564'),
+        (res) => readJson<{ id: string }>(res),
+        ctx,
+      );
+      expect(body).toEqual({ id: '22705923' });
+    } finally {
+      authed.dispose();
+    }
+    expect(fm.calls.map((c) => c.request.url)).toEqual([
+      'https://zenodo.org/api/records/591564',
+      'https://zenodo.org/api/records/22705923',
+    ]);
+    for (const call of fm.calls) {
+      expect(call.request.redirect).toBe('manual');
+      expect(call.request.headers.get('authorization')).toBe('Bearer tok-123');
+    }
+  });
+
+  it('resolves a relative Location against the request URL', async () => {
+    fm.route(
+      {
+        match: onPath('/records/591564'),
+        respond: () => textResponse(null, 301, { location: '/api/records/22705923' }),
+      },
+      { match: onPath('/records/22705923'), respond: () => jsonResponse({}) },
+    );
+    expect(await http.request(recordReq('591564'), readStatus, ctx)).toBe(200);
+    expect(fm.calls).toHaveLength(2);
+  });
+
+  it.each([
+    'https://attacker.example/api/records/1',
+    'http://zenodo.org/api/records/1',
+    'https://zenodo.org:8443/api/records/1',
+    'https://zenodo.org.attacker.example/api/records/1',
+    '//attacker.example/api/records/1',
+  ])('refuses a redirect to %s without requesting it', async (location) => {
+    const authed = new ZenodoHttp({ accessToken: 'tok-123', userAgent: UA });
+    fm.route({ match: onPath('/records/1'), respond: () => textResponse(null, 302, { location }) });
+    try {
+      const err = errorOf(await drive(authed.request(recordReq('1'), readStatus, ctx)));
+      expect(err.code).toBe(JsonRpcErrorCode.ServiceUnavailable);
+      expect(err.message).toContain('off zenodo.org');
+      expect(err.data).toMatchObject({ status: 302, retryable: false });
+    } finally {
+      authed.dispose();
+    }
+    expect(fm.calls).toHaveLength(1);
+  });
+
+  it('stops after three redirects', async () => {
+    fm.route({
+      match: onPath('/records/1'),
+      respond: () => textResponse(null, 302, { location: 'https://zenodo.org/api/records/1' }),
+    });
+    const err = errorOf(await drive(http.request(recordReq('1'), readStatus, ctx)));
+    expect(err.message).toContain('more than 3 times');
+    expect(fm.calls).toHaveLength(4);
+  });
+});
+
 describe('accept-lists', () => {
   it.each([206, 301, 302, 403, 404, 410, 416])(
     'returns HTTP %i as a result when the call accepts it',
@@ -817,6 +891,22 @@ describe('readJson', () => {
     await expect(readJson(textResponse('not json', 200))).rejects.toMatchObject({
       code: JsonRpcErrorCode.ServiceUnavailable,
     });
+  });
+
+  it('refuses a body over 32 MiB without buffering the rest of it', async () => {
+    const chunk = new Uint8Array(1024 * 1024).fill(0x20);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent++ < 64) controller.enqueue(chunk);
+        else controller.close();
+      },
+    });
+    await expect(readJson(new Response(body))).rejects.toMatchObject({
+      code: JsonRpcErrorCode.ServiceUnavailable,
+      data: { retryable: false },
+    });
+    expect(sent).toBeLessThan(40);
   });
 });
 

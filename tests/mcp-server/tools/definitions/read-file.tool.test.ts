@@ -782,6 +782,22 @@ describe('zenodo_read_file — ZIP members', () => {
     expect(paths()).toEqual(['/api/records/22705923']);
   });
 
+  it.each([
+    '../../../../me',
+    '../../../../../api/user/records',
+    'scikit-learn-1.9.1/../../../x',
+    'scikit-learn-1.9.1/./README.rst',
+    '..',
+  ])(
+    'member_not_found for %j, whose dot segments would reach another zenodo.org path',
+    async (member) => {
+      serveRecord('22705923', textRecord);
+      const err = await failure({ id: '22705923', key: SKLEARN_ZIP, archive_member: member });
+      expectReason(err, 'member_not_found', JsonRpcErrorCode.NotFound);
+      expect(paths()).toEqual(['/api/records/22705923']);
+    },
+  );
+
   it('not_an_archive when archive_member is set on a non-ZIP key', async () => {
     serveRecord('22917909', () => fixture('record-22917909-csv.json'));
     const err = await failure({

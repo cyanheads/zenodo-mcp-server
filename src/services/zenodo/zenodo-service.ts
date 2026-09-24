@@ -8,6 +8,7 @@
 
 import type { Context } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
+import { validationError } from '@cyanheads/mcp-ts-core/errors';
 import { getServerConfig } from '@/config/server-config.js';
 import { TtlLruCache } from './cache.js';
 import {
@@ -16,10 +17,11 @@ import {
   JSON_ATTEMPT_MS,
   readCapped,
   readJson,
+  readText,
   ZenodoHttp,
   type ZenodoRequest,
 } from './http.js';
-import { downloadUrl, encodeKeySegments, type FunderRef } from './identifiers.js';
+import { downloadUrl, encodeKeySegments, type FunderRef, hasDotSegment } from './identifiers.js';
 import {
   normalizeAward,
   normalizeCommunity,
@@ -84,6 +86,22 @@ const VOCABULARY_PATHS: Record<RemoteVocabulary, string> = {
   awards: '/awards',
   licenses: '/vocabularies/licenses',
 };
+
+/**
+ * Request path of a file endpoint: `/records/{recid}/files/{key}` plus any further
+ * segments, each key or member path percent-encoded. A `.` or `..` segment is
+ * refused, since the URL parser would resolve it to another zenodo.org endpoint.
+ */
+function filePath(recid: string, key: string, ...rest: string[]): string {
+  for (const part of [key, ...rest]) {
+    if (hasDotSegment(part)) {
+      throw validationError(
+        'A file key or archive member path with a "." or ".." segment names no file on Zenodo.',
+      );
+    }
+  }
+  return `/records/${recid}/files/${[key, ...rest].map(encodeKeySegments).join('/')}`;
+}
 
 /** A search page plus the exact `q` that was sent. */
 export type SearchResult = SearchPage & { q?: string };
@@ -291,7 +309,7 @@ export class ZenodoService {
         'getCitation',
         query,
       ),
-      async (res) => (await res.text()).trim(),
+      async (res) => (await readText(res)).trim(),
       ctx,
     );
   }
@@ -307,7 +325,7 @@ export class ZenodoService {
     const lookup = await this.#http.request(
       {
         ...this.#jsonRequest(
-          `/records/${recid}/files/${encodeKeySegments(key)}/container`,
+          filePath(recid, key, 'container'),
           JSON_ACCEPT,
           'general',
           'archive',
@@ -340,7 +358,7 @@ export class ZenodoService {
     return this.#http.request(
       {
         ...this.#jsonRequest(
-          `/records/${recid}/files/${encodeKeySegments(key)}/content`,
+          filePath(recid, key, 'content'),
           JSON_ACCEPT,
           'general',
           'other',
@@ -382,7 +400,7 @@ export class ZenodoService {
     return this.#http.request(
       {
         ...this.#jsonRequest(
-          `/records/${recid}/files/${encodeKeySegments(key)}/container/${encodeKeySegments(member)}`,
+          filePath(recid, key, 'container', member),
           JSON_ACCEPT,
           'general',
           'archive',

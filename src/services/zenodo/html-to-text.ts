@@ -70,7 +70,62 @@ function escapeForDecode(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-const stripTags = (html: string) => html.replace(/<[^>]*>/g, '');
+/**
+ * Every pattern and scan below stays linear on hostile input: descriptions are
+ * depositor-supplied and converted for every search hit, so a pattern that rescans
+ * to the end of the text from each `<` (or each space) would let one deposit stall
+ * the server. Tag patterns stop at the next `<` or `>` instead of scanning past it.
+ */
+
+/** Drops every `<…>` tag: each `<` through the next `>`, as `/<[^>]*>/g` would, in one pass. */
+function stripTags(html: string): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const open = html.indexOf('<', from);
+    const close = open === -1 ? -1 : html.indexOf('>', open);
+    if (close === -1) return out + html.slice(from);
+    out += html.slice(from, open);
+    from = close + 1;
+  }
+}
+
+const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+
+/**
+ * `<a href="X">T</a>` → `T (X)` when X is http(s) and differs from T, else `T`.
+ * Each closing tag is searched for once, from its opening tag; with none left, the
+ * remaining links stay as they are.
+ */
+function inlineLinks(html: string): string {
+  const openTag = /<a\b([^<>]*)>/gi;
+  const closeTag = /<\/a\s*>/gi;
+  let out = '';
+  let from = 0;
+  for (let open = openTag.exec(html); open; open = openTag.exec(html)) {
+    const attr = HREF.exec(open[1] ?? '');
+    if (!attr) continue;
+    closeTag.lastIndex = openTag.lastIndex;
+    const close = closeTag.exec(html);
+    if (!close) break;
+    const inner = html.slice(openTag.lastIndex, close.index);
+    const href = decodeEntities(attr[1] ?? attr[2] ?? attr[3] ?? '').trim();
+    const text = decodeEntities(stripTags(inner)).trim();
+    out +=
+      html.slice(from, open.index) +
+      (/^https?:\/\//i.test(href) && href !== text ? `${inner} (${escapeForDecode(href)})` : inner);
+    from = close.index + close[0].length;
+    openTag.lastIndex = from;
+  }
+  return out + html.slice(from);
+}
+
+/** `line` without trailing spaces and tabs. */
+function trimTrailingBlanks(line: string): string {
+  let end = line.length;
+  while (end > 0 && (line[end - 1] === ' ' || line[end - 1] === '\t')) end--;
+  return line.slice(0, end);
+}
 
 /**
  * Converts an HTML fragment to plain text:
@@ -84,35 +139,20 @@ const stripTags = (html: string) => html.replace(/<[^>]*>/g, '');
 export function htmlToText(html: string): string {
   let s = html
     .replace(/<!--[\s\S]*?(?:-->|$)/g, '')
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, '');
+    .replace(/<(script|style)\b[^<>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, '');
 
   s = s
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|h[1-6]|li|tr|blockquote|pre|ul|ol|table)\s*>/gi, '\n')
-    .replace(/<li\b[^>]*>/gi, '- ');
+    .replace(/<li\b[^<>]*>/gi, '- ');
 
-  s = s.replace(
-    /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a\s*>/gi,
-    (
-      _match,
-      dq: string | undefined,
-      sq: string | undefined,
-      bare: string | undefined,
-      inner: string,
-    ) => {
-      const href = decodeEntities(dq ?? sq ?? bare ?? '').trim();
-      const text = decodeEntities(stripTags(inner)).trim();
-      return /^https?:\/\//i.test(href) && href !== text
-        ? `${inner} (${escapeForDecode(href)})`
-        : inner;
-    },
-  );
-
-  s = decodeEntities(stripTags(s));
+  s = decodeEntities(stripTags(inlineLinks(s)));
 
   return s
     .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+$/gm, '')
+    .split('\n')
+    .map(trimTrailingBlanks)
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

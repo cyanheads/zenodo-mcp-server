@@ -619,13 +619,15 @@ export const searchRecords = tool('zenodo_search_records', {
         `**Record:** ${h.recid}${h.concept_recid ? ` | **Concept record:** ${h.concept_recid}` : ''} | **URL:** ${h.zenodo_url}`,
       );
       const ids = [
-        h.doi ? `**DOI:** ${h.doi}${h.doi_provider ? ` (${h.doi_provider})` : ''}` : undefined,
-        h.concept_doi ? `**Concept DOI:** ${h.concept_doi}` : undefined,
+        h.doi
+          ? `**DOI:** ${inline(h.doi)}${h.doi_provider ? ` (${inline(h.doi_provider)})` : ''}`
+          : undefined,
+        h.concept_doi ? `**Concept DOI:** ${inline(h.concept_doi)}` : undefined,
       ].filter(Boolean);
       if (ids.length) lines.push(ids.join(' | '));
       const facts = [
         h.resource_type
-          ? `**Type:** ${h.resource_type.title ? `${inline(h.resource_type.title)} ` : ''}(${h.resource_type.id})`
+          ? `**Type:** ${h.resource_type.title ? `${inline(h.resource_type.title)} ` : ''}(${inline(h.resource_type.id)})`
           : undefined,
         h.publication_date ? `**Published:** ${inline(h.publication_date)}` : undefined,
         h.version ? `**Version:** ${inline(h.version)}` : undefined,
@@ -634,13 +636,13 @@ export const searchRecords = tool('zenodo_search_records', {
       ].filter(Boolean);
       if (facts.length) lines.push(facts.join(' | '));
       const creators = h.creators
-        .map((c) => `${inline(c.name)}${c.orcid ? ` (ORCID ${c.orcid})` : ''}`)
+        .map((c) => `${inline(c.name)}${c.orcid ? ` (ORCID ${inline(c.orcid)})` : ''}`)
         .join('; ');
       lines.push(
         `**Creators (${h.creator_count}):** ${creators || 'none listed'}${h.creator_count > h.creators.length ? '; …' : ''}`,
       );
       lines.push(
-        `**Access:** ${h.access.status}${h.access.files ? `, files ${h.access.files}` : ''}${h.access.embargo_until ? `, embargoed until ${h.access.embargo_until}` : ''} | **Licenses:** ${h.license_ids.length ? h.license_ids.join(', ') : 'none with an id'}`,
+        `**Access:** ${inline(h.access.status)}${h.access.files ? `, files ${inline(h.access.files)}` : ''}${h.access.embargo_until ? `, embargoed until ${inline(h.access.embargo_until)}` : ''} | **Licenses:** ${h.license_ids.length ? h.license_ids.map(inline).join(', ') : 'none with an id'}`,
       );
       lines.push(
         `**Files:** ${h.file_count ?? 'not disclosed'} (${h.total_bytes ?? 'not disclosed'} bytes) | **Views:** ${h.views ?? 'not available'} | **Downloads:** ${h.downloads ?? 'not available'}`,

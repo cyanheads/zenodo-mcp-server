@@ -2,7 +2,8 @@
  * @fileoverview The single fetch boundary to the Zenodo REST API. Per-call status
  * accept-lists (206/301/302/403/404/410/416 are outcomes here, not errors), the
  * rate-limit header gate, two pacers (search and general buckets), and the retry
- * matrix. Only paths the service builds are fetched, against a constant base URL.
+ * matrix. Only paths the service builds are fetched, against a constant base URL,
+ * and redirects are followed only within zenodo.org.
  * @module services/zenodo/http
  */
 
@@ -22,7 +23,12 @@ import {
   withRetry,
 } from '@cyanheads/mcp-ts-core/utils';
 
-const BASE_URL = 'https://zenodo.org/api';
+const ORIGIN = 'https://zenodo.org';
+const BASE_URL = `${ORIGIN}/api`;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 3;
+/** Largest JSON or text body read; the heaviest upstream page observed is 8.4 MB. */
+const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 /** Upstream rate-limit bucket. `search` is the record-search list only (30/min). */
 export type Bucket = 'search' | 'general';
@@ -52,6 +58,7 @@ export interface ZenodoRequest {
   path: string;
   query?: readonly (readonly [string, string])[];
   range?: string;
+  /** `follow` (default): follow redirects within zenodo.org. `manual`: return the 3xx itself. */
   redirect?: 'follow' | 'manual';
 }
 
@@ -87,9 +94,21 @@ export async function discardBody(res: Response): Promise<void> {
   await res.body?.cancel().catch(() => undefined);
 }
 
+/** Reads a UTF-8 body of at most {@link MAX_BODY_BYTES}; a larger one is refused, not buffered. */
+export async function readText(res: Response): Promise<string> {
+  const { bytes, more } = await readCapped(res, MAX_BODY_BYTES);
+  if (more) {
+    throw serviceUnavailable(
+      `Zenodo returned a response body over ${MAX_BODY_BYTES} bytes; it was not read.`,
+      { status: res.status, retryable: false },
+    );
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 /** Reads a JSON body. An HTML page or unparseable body on a 2xx is a transient upstream fault. */
 export async function readJson<T>(res: Response): Promise<T> {
-  const text = await res.text();
+  const text = await readText(res);
   if (res.ok && looksLikeHtml(text)) {
     throw serviceUnavailable('Zenodo returned an HTML page instead of JSON (edge error page).', {
       status: res.status,
@@ -262,12 +281,7 @@ export class ZenodoHttp {
     const timer = setTimeout(() => deadline.abort(), budget);
     const started = Date.now();
     try {
-      const res = await fetch(this.#url(req), {
-        headers: this.#requestHeaders(req),
-        redirect: req.redirect ?? 'follow',
-        signal: AbortSignal.any([signal, deadline.signal]),
-      });
-      this.#track(req.bucket, res.headers);
+      const res = await this.#fetchWithinZenodo(req, AbortSignal.any([signal, deadline.signal]));
       if (!req.okStatuses.includes(res.status)) {
         throw await this.#statusError(req, res, ctx, Date.now() - started);
       }
@@ -283,6 +297,38 @@ export class ZenodoHttp {
       );
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Fetches with `redirect: 'manual'` and follows a redirect only while its target
+   * stays on zenodo.org, so neither the request nor its Authorization header can be
+   * sent to another host. A `manual` request gets the 3xx itself.
+   */
+  async #fetchWithinZenodo(req: ZenodoRequest, signal: AbortSignal): Promise<Response> {
+    let url = this.#url(req);
+    for (let hops = 0; ; hops++) {
+      const res = await fetch(url, {
+        headers: this.#requestHeaders(req),
+        redirect: 'manual',
+        signal,
+      });
+      this.#track(req.bucket, res.headers);
+      const location = res.headers.get('location');
+      if (req.redirect === 'manual' || !REDIRECT_STATUSES.has(res.status) || location === null) {
+        return res;
+      }
+      await discardBody(res);
+      const next = URL.parse(location, url);
+      if (next?.origin !== ORIGIN || hops === MAX_REDIRECTS) {
+        throw serviceUnavailable(
+          hops === MAX_REDIRECTS
+            ? `Zenodo redirected ${req.operation} more than ${MAX_REDIRECTS} times.`
+            : `Zenodo redirected ${req.operation} off zenodo.org; the redirect was not followed.`,
+          { status: res.status, retryable: false },
+        );
+      }
+      url = next.href;
     }
   }
 

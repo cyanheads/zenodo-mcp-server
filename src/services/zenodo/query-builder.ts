@@ -60,6 +60,68 @@ export function quoteValue(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
+/** Operator words that leave a query's first or last word with nothing on one side. */
+const LEADING_OPERATORS = new Set(['AND', 'OR', '&&', '||']);
+const TRAILING_OPERATORS = new Set([...LEADING_OPERATORS, 'NOT', '+', '-', '!']);
+
+/** `query` without operator words at its start or end, spacing inside it kept. */
+function trimOperators(query: string): string {
+  const words = [...query.matchAll(/\S+/g)];
+  let first = 0;
+  let last = words.length - 1;
+  while (first <= last && LEADING_OPERATORS.has(words[first]?.[0] ?? '')) first++;
+  while (last >= first && TRAILING_OPERATORS.has(words[last]?.[0] ?? '')) last--;
+  const head = words[first];
+  const tail = words[last];
+  return head && tail && first <= last ? query.slice(head.index, tail.index + tail[0].length) : '';
+}
+
+/**
+ * Closes whatever a caller's query leaves open, so it stays inside the parentheses
+ * it is composed in: a leading or trailing boolean operator is dropped, a dangling
+ * `\` is completed as `\\`, an unterminated quote or `/…/` regex is closed, a `)`
+ * with no open group is escaped as `\)`, and each group left open is closed.
+ * Zenodo matches a query it cannot parse as plain text, which turns the filter
+ * clauses into optional terms (an unterminated quote matched the whole corpus
+ * instead of the filtered set), and a stray `)` lets the query widen them. A
+ * well-formed query comes back unchanged.
+ */
+export function balanceQuery(raw: string): string {
+  const query = trimOperators(raw);
+  let out = '';
+  let depth = 0;
+  let mode: 'text' | 'quote' | 'regex' = 'text';
+  for (let i = 0; i < query.length; i++) {
+    const ch = query[i] as string;
+    if (ch === '\\') {
+      out += i + 1 < query.length ? query.slice(i, i + 2) : '\\\\';
+      i++;
+      continue;
+    }
+    if (mode === 'quote') {
+      if (ch === '"') mode = 'text';
+    } else if (mode === 'regex') {
+      if (ch === '/') mode = 'text';
+    } else if (ch === '"') {
+      mode = 'quote';
+    } else if (ch === '/') {
+      mode = 'regex';
+    } else if (ch === '(') {
+      depth++;
+    } else if (ch === ')') {
+      if (depth === 0) {
+        out += '\\)';
+        continue;
+      }
+      depth--;
+    }
+    out += ch;
+  }
+  if (mode === 'quote') out += '"';
+  if (mode === 'regex') out += '/';
+  return out + ')'.repeat(depth);
+}
+
 /** One clause, or several OR-ed inside parentheses. */
 function anyOf(clauses: string[]): string {
   return clauses.length === 1 ? (clauses[0] as string) : `(${clauses.join(' OR ')})`;
@@ -82,7 +144,8 @@ function resourceTypeClause(id: string): string {
  * `resource_type` / `file_type` / `access_status` params: those params are
  * post-filters, applied after the aggregations are computed, so the facet counts
  * would ignore them and contradict `total`. As `q` clauses they narrow hits and
- * facets alike, with the same totals.
+ * facets alike, with the same totals. The query is balanced ({@link balanceQuery})
+ * before it is grouped with them, so it cannot drop or widen a filter clause.
  */
 export function buildSearch(filters: SearchFilters): BuiltSearch {
   const clauses: string[] = [];
@@ -111,7 +174,7 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
     );
   }
 
-  const query = filters.query?.trim();
+  const query = clauses.length > 0 ? balanceQuery(filters.query ?? '') : filters.query?.trim();
   if (query) clauses.unshift(clauses.length > 0 ? `(${query})` : query);
   const q = clauses.length > 0 ? clauses.join(' AND ') : undefined;
 

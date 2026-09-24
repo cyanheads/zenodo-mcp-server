@@ -1,12 +1,13 @@
 /**
  * @fileoverview Tests for search composition: the parameter allowlist, `q` clause
- * composition and quoting, vocabulary-query escaping, the unpaired-slash detector,
- * and partial-date validation and expansion.
+ * composition and quoting, query balancing, vocabulary-query escaping, the
+ * unpaired-slash detector, and partial-date validation and expansion.
  * @module tests/services/zenodo/query-builder.test
  */
 
 import { describe, expect, it } from 'vitest';
 import {
+  balanceQuery,
   buildSearch,
   escapeVocabularyQuery,
   expandPartialDate,
@@ -146,6 +147,61 @@ describe('buildSearch', () => {
       allVersions: true,
     });
     for (const [key] of built.params) expect(ALLOWLIST.has(key)).toBe(true);
+  });
+
+  it('keeps a malformed query inside its group, so every filter clause still applies', () => {
+    const q = (query: string) => buildSearch({ ...base, query, license: 'mit' }).q;
+    const filter = 'metadata.rights.id:"mit"';
+    expect(q('climate "x')).toBe(`(climate "x") AND ${filter}`);
+    expect(q('climate\\')).toBe(`(climate\\\\) AND ${filter}`);
+    expect(q('x) OR (*')).toBe(`(x\\) OR (*)) AND ${filter}`);
+    expect(q('climate OR')).toBe(`(climate) AND ${filter}`);
+    expect(q('AND')).toBe(filter);
+  });
+
+  it('sends a query with no filter clauses as written', () => {
+    expect(buildSearch({ ...base, query: 'climate "x' }).q).toBe('climate "x');
+  });
+});
+
+describe('balanceQuery', () => {
+  it.each([
+    ['climate "x', 'climate "x"'],
+    ['climate\\', 'climate\\\\'],
+    ['"a\\', '"a\\\\"'],
+    ['x) OR (*', 'x\\) OR (*)'],
+    ['(a OR (b', '(a OR (b))'],
+    ['a /re', 'a /re/'],
+    ['climate OR', 'climate'],
+    ['AND OR climate model AND NOT', 'climate model'],
+    ['climate -', 'climate'],
+    ['AND', ''],
+  ])('%j → %j', (raw, expected) => {
+    expect(balanceQuery(raw)).toBe(expected);
+  });
+
+  it.each([
+    'climate',
+    'NOT climate',
+    '-draft climate',
+    'metadata.title:"a (b"',
+    '(a OR b) AND c',
+    'a\\) b',
+    '/a(/ b',
+    '"a\\"b"',
+    'a   "b  c"',
+  ])('leaves the well-formed %j unchanged', (query) => {
+    expect(balanceQuery(query)).toBe(query);
+  });
+
+  it.each([
+    ['operator words', 'AND '.repeat(50_000)],
+    ['open groups', '('.repeat(200_000)],
+    ['stray closers', ')'.repeat(200_000)],
+  ])('stays linear on %s', (_label, query) => {
+    const started = performance.now();
+    balanceQuery(query);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
 

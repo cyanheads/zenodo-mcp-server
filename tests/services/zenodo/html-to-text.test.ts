@@ -71,6 +71,17 @@ describe('htmlToText — links', () => {
     expect(htmlToText('<a href=https://b.test target=_blank>B</a>')).toBe('B (https://b.test)');
   });
 
+  it('converts every closed link and leaves text after an unclosed one', () => {
+    expect(
+      htmlToText(
+        '<a href="https://a.test">A</a> and <a href="https://b.test">B</a> <a href="https://c.test">C',
+      ),
+    ).toBe('A (https://a.test) and B (https://b.test) C');
+    expect(htmlToText('<a name="x">anchor</a> <a href="https://d.test">D</a>')).toBe(
+      'anchor D (https://d.test)',
+    );
+  });
+
   it('decodes entities in the href exactly once', () => {
     expect(htmlToText('<a href="https://x.test/?a=1&amp;b=%3C">Q</a>')).toBe(
       'Q (https://x.test/?a=1&b=%3C)',
@@ -126,6 +137,30 @@ describe('htmlToText — whitespace', () => {
 
   it('returns an empty string for markup with no text', () => {
     expect(htmlToText('<p></p><br><script>x</script>')).toBe('');
+  });
+
+  it('keeps a < with no > after it as text, and strips a < through the next >', () => {
+    expect(htmlToText('a < b and c')).toBe('a < b and c');
+    expect(htmlToText('a < b and <i>c</i>')).toBe('a c');
+  });
+});
+
+describe('htmlToText — adversarial descriptions stay linear', () => {
+  const N = 200_000;
+  it.each([
+    ['a run of <', '<'.repeat(N)],
+    ['unclosed <a tags', '<a '.repeat(N / 3)],
+    ['linked <a> tags with no </a>', '<a href=https://x.test>'.repeat(N / 22)],
+    ['an href with no closing quote', `<a href="${'a'.repeat(N)}`],
+    ['a </a with no >', `<a href=https://x.test>t</a${' '.repeat(N)}`],
+    ['unclosed <li tags', '<li'.repeat(N / 3)],
+    ['unclosed <script tags', '<script'.repeat(N / 7)],
+    ['a long run of spaces before text', `a${' '.repeat(N)}x`],
+    ['a long run of spaces inside a tag name', `</p${' '.repeat(N)}x`],
+  ])('%s', (_label, html) => {
+    const started = performance.now();
+    htmlToText(html);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
 

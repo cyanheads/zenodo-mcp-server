@@ -654,6 +654,21 @@ describe('readContent and readMember', () => {
       'not_found',
     );
   });
+
+  it.each<[string, () => Promise<unknown>]>([
+    ['a member', () => service.readMember('1', 'b.zip', '../../../../me', 8, ctx())],
+    ['a member segment', () => service.readMember('1', 'b.zip', 'pkg/./x', 8, ctx())],
+    ['a key', () => service.readContent('1', '../../../communities', 0, 8, ctx())],
+    ['an archive key', () => service.getContainer('1', 'a/../../b.zip', ctx())],
+  ])(
+    'refuses %s with a dot segment before any request, so no other zenodo.org path is reached',
+    async (_label, read) => {
+      await expect(Promise.resolve().then(read)).rejects.toMatchObject({
+        message: expect.stringContaining('"." or ".." segment'),
+      });
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
 });
 
 describe('communities and funders', () => {

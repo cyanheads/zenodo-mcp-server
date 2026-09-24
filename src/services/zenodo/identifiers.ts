@@ -41,13 +41,33 @@ const DOI_HOSTS = new Set(['doi.org', 'dx.doi.org', 'www.doi.org']);
 const DOI_PATTERN = /^10\.\d{4,9}\/\S+$/;
 const ZENODO_DOI_PATTERN = /^10\.5281\/zenodo\.(\d+)$/i;
 const ZENODO_SUFFIX_PATTERN = /^zenodo\.(\d+)$/i;
-const TRAILING_PUNCTUATION = /[.,;]+$/;
+const QUOTE_CHARS = new Set(['"', "'", '“', '”', '‘', '’']);
+const SPACE = /\s/;
 
-/** True when `s` is enclosed in `<…>` or a pair of quote characters. */
-function isWrapped(s: string): boolean {
-  return (
-    s.length >= 2 &&
-    ((s.startsWith('<') && s.endsWith('>')) || (/^["'“”‘’]/.test(s) && /["'“”‘’]$/.test(s)))
+/**
+ * Index just past `s[start, end)` once every trailing character in `chars` is
+ * dropped. A backward scan rather than a `[…]+$` regex, which backtracks
+ * quadratically when a long run of those characters is followed by anything else.
+ */
+function trimEndOf(s: string, start: number, end: number, matches: (ch: string) => boolean) {
+  let e = end;
+  while (e > start && matches(s[e - 1] as string)) e--;
+  return e;
+}
+
+const isSpace = (ch: string) => SPACE.test(ch);
+const isTrailingPunctuation = (ch: string) => ch === '.' || ch === ',' || ch === ';';
+
+/** `s` without trailing `.`/`,`/`;`. */
+function stripTrailingPunctuation(s: string): string {
+  return s.slice(0, trimEndOf(s, 0, s.length, isTrailingPunctuation));
+}
+
+/** `s` without trailing `/`. */
+function stripTrailingSlashes(s: string): string {
+  return s.slice(
+    0,
+    trimEndOf(s, 0, s.length, (ch) => ch === '/'),
   );
 }
 
@@ -56,20 +76,29 @@ function isWrapped(s: string): boolean {
  * any nesting order. Trailing `.`/`,`/`;` after a closing wrapper — an id copied
  * out of a sentence such as `…available at <https://doi.org/…>.` — sits outside the
  * value and is dropped with it; punctuation inside the wrapper is left to the
- * per-form rules.
+ * per-form rules. Walks two indices inward, so deep nesting stays linear.
  */
 function stripWrapping(raw: string): string {
-  let s = raw.trim();
+  let start = 0;
+  let end = raw.length;
   for (;;) {
-    const unpunctuated = s.replace(TRAILING_PUNCTUATION, '').trimEnd();
-    if (!isWrapped(unpunctuated)) return s;
-    s = unpunctuated.slice(1, -1).trim();
+    while (start < end && isSpace(raw[start] as string)) start++;
+    end = trimEndOf(raw, start, end, isSpace);
+    const inner = trimEndOf(raw, start, trimEndOf(raw, start, end, isTrailingPunctuation), isSpace);
+    const first = raw[start] as string;
+    const last = raw[inner - 1] as string;
+    const wrapped =
+      inner - start >= 2 &&
+      ((first === '<' && last === '>') || (QUOTE_CHARS.has(first) && QUOTE_CHARS.has(last)));
+    if (!wrapped) return raw.slice(start, end);
+    start++;
+    end = inner - 1;
   }
 }
 
 /** Classifies a bare DOI string (no `doi:` prefix, no URL). */
 function classifyDoi(doi: string, inputKind: InputKind): RecordRef | ParseFailure {
-  const stripped = doi.replace(TRAILING_PUNCTUATION, '');
+  const stripped = stripTrailingPunctuation(doi);
   const zenodo = ZENODO_DOI_PATTERN.exec(stripped);
   if (zenodo?.[1]) {
     return {
@@ -122,7 +151,7 @@ function parseUrl(raw: string): RecordRef | ParseFailure {
     return { kind: 'invalid', message: note };
   }
 
-  const path = url.pathname.replace(TRAILING_PUNCTUATION, '');
+  const path = stripTrailingPunctuation(url.pathname);
   if (/^\/badge\/latestdoi\//i.test(path)) {
     return {
       kind: 'invalid',
@@ -163,7 +192,7 @@ export function parseRecordRef(raw: string): RecordRef | ParseFailure {
   if (/^https?:\/\//i.test(withScheme)) return parseUrl(withScheme);
 
   const bare = s.replace(/^doi:\s*/i, '');
-  const stripped = bare.replace(TRAILING_PUNCTUATION, '');
+  const stripped = stripTrailingPunctuation(bare);
 
   if (bare === s && /^\d+$/.test(stripped)) {
     return { kind: 'recid', recid: stripped, inputKind: 'record_id' };
@@ -198,7 +227,7 @@ const ROR_ID = /^0[a-z0-9]{6}\d{2}$/;
  * Returns `undefined` for anything else — funder names are never matched.
  */
 export function parseFunderRef(raw: string): FunderRef | undefined {
-  const s = stripWrapping(raw).replace(/\/+$/, '');
+  const s = stripTrailingSlashes(stripWrapping(raw));
   const ror = /^(?:https?:\/\/)?(?:www\.)?ror\.org\/(.+)$/i.exec(s)?.[1] ?? s;
   if (ROR_ID.test(ror.toLowerCase())) return { kind: 'ror', ror: ror.toLowerCase() };
   const doi = s.replace(/^(?:https?:\/\/)?(?:dx\.)?doi\.org\//i, '').replace(/^doi:\s*/i, '');
@@ -230,10 +259,9 @@ export function parseAwardRef(raw: string): AwardRef {
  * trailing check character `x`. Validation is separate ({@link isValidOrcid}).
  */
 export function normalizeOrcid(raw: string): string {
-  return stripWrapping(raw)
-    .replace(/^(?:https?:\/\/)?(?:www\.)?orcid\.org\//i, '')
-    .replace(/\/+$/, '')
-    .replace(/x$/, 'X');
+  return stripTrailingSlashes(
+    stripWrapping(raw).replace(/^(?:https?:\/\/)?(?:www\.)?orcid\.org\//i, ''),
+  ).replace(/x$/, 'X');
 }
 
 /** The `0000-0000-0000-000X` shape of an ORCID iD. */
@@ -258,11 +286,24 @@ export function parseCommunityRef(raw: string): string | undefined {
   const s = stripWrapping(raw);
   const fromUrl =
     /^(?:https?:\/\/)?(?:www\.)?zenodo\.org\/communities\/([^/?#]+)/i.exec(s)?.[1] ?? s;
-  const value = safeDecode(fromUrl).replace(/\/+$/, '');
+  const value = stripTrailingSlashes(safeDecode(fromUrl));
   return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value) ? value : undefined;
 }
 
-/** Encodes a file key (or ZIP member path) for a URL path: each `/`-separated segment is percent-encoded. */
+/**
+ * True when a `/`-separated key or member path has a `.` or `..` segment.
+ * `encodeURIComponent` leaves those literal and the URL parser resolves them, so
+ * such a path would reach a different zenodo.org endpoint instead of naming a file.
+ */
+export function hasDotSegment(key: string): boolean {
+  return key.split('/').some((segment) => segment === '.' || segment === '..');
+}
+
+/**
+ * Encodes a file key (or ZIP member path) for a URL path: each `/`-separated
+ * segment is percent-encoded. Request paths must reject {@link hasDotSegment}
+ * keys first, since `.` and `..` survive encoding.
+ */
 export function encodeKeySegments(key: string): string {
   return key.split('/').map(encodeURIComponent).join('/');
 }

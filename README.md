@@ -225,6 +225,8 @@ Zenodo rate-limits anonymous clients per IP address: 60 requests per minute and 
 
 With `ZENODO_ACCESS_TOKEN` set, Zenodo allows 100 requests per minute and 5,000 per hour, and the server paces other requests at 90 per minute and 4,800 per hour. Search stays at 25 per minute.
 
+The token authenticates as the account that created it, so reads can see what that account can see, including restricted records it owns. On a shared or hosted server, create the token on a dedicated account that owns no restricted records.
+
 ## Running the server
 
 ### Local development

@@ -8,7 +8,12 @@
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-import { downloadUrl, parseRecordRef, recordUrl } from '@/services/zenodo/identifiers.js';
+import {
+  downloadUrl,
+  hasDotSegment,
+  parseRecordRef,
+  recordUrl,
+} from '@/services/zenodo/identifiers.js';
 import {
   cutPreview,
   isZip,
@@ -339,6 +344,13 @@ export const readFile = tool('zenodo_read_file', {
           ctx.recoveryFor('member_offset_unsupported'),
         );
       }
+      if (hasDotSegment(member)) {
+        throw ctx.fail(
+          'member_not_found',
+          `"${displayName}" has a "." or ".." path segment, so it names no member of the .zip "${inline(input.key)}".`,
+          ctx.recoveryFor('member_not_found'),
+        );
+      }
       const container = await service.getContainer(recid, entry.key, ctx);
       const listed =
         container.status === 'ok'
@@ -467,10 +479,10 @@ export const readFile = tool('zenodo_read_file', {
       : inline(result.key);
     const lines: string[] = [
       `## ${name} — record ${result.recid}`,
-      `**Status:** ${result.status} | **MIME type:** ${result.mimetype ?? 'unknown'} | **File size:** ${result.file_size ?? 'unknown'} bytes${result.md5 ? ` | **MD5:** ${result.md5}` : ''}`,
+      `**Status:** ${result.status} | **MIME type:** ${inline(result.mimetype ?? 'unknown')} | **File size:** ${result.file_size ?? 'unknown'} bytes${result.md5 ? ` | **MD5:** ${inline(result.md5)}` : ''}`,
       `**Offset:** ${result.offset_bytes} | **Bytes returned:** ${result.bytes_returned} | **Has more:** ${result.has_more}${result.next_offset !== undefined ? ` | **Next offset:** ${result.next_offset}` : ''} | **Replacement chars:** ${result.replacement_chars}`,
-      `**License:** ${result.rights.length ? result.rights.map((r) => `${inline(r.title)}${r.id ? ` (${r.id})` : ''}`).join('; ') : 'not stated'} — record ${result.record_url}`,
-      `**Download:** ${result.download_url}${result.files_access ? ` | **Files access:** ${result.files_access}` : ''}`,
+      `**License:** ${result.rights.length ? result.rights.map((r) => `${inline(r.title)}${r.id ? ` (${inline(r.id)})` : ''}`).join('; ') : 'not stated'} — record ${result.record_url}`,
+      `**Download:** ${result.download_url}${result.files_access ? ` | **Files access:** ${inline(result.files_access)}` : ''}`,
     ];
     if (result.text !== undefined) {
       lines.push(

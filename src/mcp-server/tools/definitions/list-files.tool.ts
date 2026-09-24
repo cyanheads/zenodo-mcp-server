@@ -402,7 +402,7 @@ export const listFiles = tool('zenodo_list_files', {
   format: (result) => {
     const lines: string[] = [
       `## Zenodo record ${result.recid} — ${result.kind === 'archive' ? 'archive members' : 'files'}`,
-      `**Kind:** ${result.kind} | **Access:** ${result.access_status}${result.files_access ? `, files ${result.files_access}` : ''}${result.embargo_until ? `, embargoed until ${result.embargo_until}` : ''} | **Files enabled:** ${result.files_enabled}`,
+      `**Kind:** ${result.kind} | **Access:** ${inline(result.access_status)}${result.files_access ? `, files ${inline(result.files_access)}` : ''}${result.embargo_until ? `, embargoed until ${inline(result.embargo_until)}` : ''} | **Files enabled:** ${result.files_enabled}`,
     ];
     const totals = [
       result.file_count !== undefined ? `**File count:** ${result.file_count}` : undefined,
@@ -421,12 +421,12 @@ export const listFiles = tool('zenodo_list_files', {
     }
     for (const e of result.entries ?? []) {
       lines.push(
-        `- ${inline(e.key)} — ${e.size ?? '?'} bytes${e.mimetype ? `, ${e.mimetype}` : ''}${e.md5 ? `, md5 ${e.md5}` : ''}; previewable: ${e.previewable}; listable: ${e.listable} — ${e.download_url}`,
+        `- ${inline(e.key)} — ${e.size ?? '?'} bytes${e.mimetype ? `, ${inline(e.mimetype)}` : ''}${e.md5 ? `, md5 ${inline(e.md5)}` : ''}; previewable: ${e.previewable}; listable: ${e.listable} — ${e.download_url}`,
       );
     }
     for (const m of result.members ?? []) {
       lines.push(
-        `- ${inline(m.path)} — ${m.size ?? '?'} bytes (compressed ${m.compressed_size ?? '?'})${m.mimetype ? `, ${m.mimetype}` : ''}; previewable: ${m.previewable}`,
+        `- ${inline(m.path)} — ${m.size ?? '?'} bytes (compressed ${m.compressed_size ?? '?'})${m.mimetype ? `, ${inline(m.mimetype)}` : ''}; previewable: ${m.previewable}`,
       );
     }
     return [{ type: 'text', text: lines.join('\n') }];

@@ -10,6 +10,7 @@ import {
   downloadUrl,
   EUROPEAN_COMMISSION_ROR,
   encodeKeySegments,
+  hasDotSegment,
   isValidOrcid,
   isWholeIdentifier,
   normalizeOrcid,
@@ -174,6 +175,23 @@ describe('parseRecordRef — rejected forms', () => {
   });
 });
 
+describe('parsers stay linear on adversarial input', () => {
+  const N = 200_000;
+  it.each([
+    ['a long trailing-punctuation run', () => parseRecordRef(`a${'.'.repeat(N)}b`)],
+    ['deeply nested quotes', () => parseRecordRef(`${'"'.repeat(N / 2)}1${'"'.repeat(N / 2)}`)],
+    ['nested angle brackets', () => parseRecordRef(`${'<'.repeat(N / 2)}1${'>'.repeat(N / 2)}`)],
+    ['an ORCID with a long slash run', () => normalizeOrcid(`a${'/'.repeat(N)}b`)],
+    ['an ORCID with a punctuation run in a wrapper', () => normalizeOrcid(`<${'.'.repeat(N)}>b`)],
+    ['a funder with a long slash run', () => parseFunderRef(`a${'/'.repeat(N)}b`)],
+    ['a community with a long slash run', () => parseCommunityRef(`a${'/'.repeat(N)}b`)],
+  ])('%s', (_label, run) => {
+    const started = performance.now();
+    run();
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
+
 describe('isWholeIdentifier', () => {
   it.each([
     ['10.5281/zenodo.591564', true],
@@ -309,6 +327,22 @@ describe('file-key encoding', () => {
     );
     expect(encodeKeySegments('data/a#b?c%.csv')).toBe('data/a%23b%3Fc%25.csv');
   });
+
+  it.each(['.', '..', '../x', 'a/../b', 'a/..', 'a/./b', '../../../../me'])(
+    'flags the dot segment in %j, which encoding leaves for the URL parser to resolve',
+    (key) => {
+      const path = `/api/records/1/files/${encodeKeySegments(key)}`;
+      expect(hasDotSegment(key)).toBe(true);
+      expect(new URL(`https://zenodo.org${path}`).pathname).not.toBe(path);
+    },
+  );
+
+  it.each(['a.b', '.hidden', 'a/.b/c', '..a', 'a..', '...', '%2e%2e', 'dir/file.txt'])(
+    'passes %j, which names a file',
+    (key) => {
+      expect(hasDotSegment(key)).toBe(false);
+    },
+  );
 
   it('builds download and landing URLs', () => {
     expect(downloadUrl('22705923', 'scikit-learn/scikit-learn-1.9.1.zip')).toBe(

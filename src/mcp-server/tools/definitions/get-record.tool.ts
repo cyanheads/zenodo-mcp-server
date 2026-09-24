@@ -335,12 +335,12 @@ function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): Re
 
 function renderPerson(p: z.infer<typeof PersonSchema>): string {
   const parts = [inline(p.name)];
-  if (p.type) parts.push(`[${p.type}]`);
-  if (p.orcid) parts.push(`ORCID ${p.orcid}`);
+  if (p.type) parts.push(`[${inline(p.type)}]`);
+  if (p.orcid) parts.push(`ORCID ${inline(p.orcid)}`);
   if (p.role) parts.push(`role: ${inline(p.role)}`);
   const affiliations = p.affiliations
     .map((a) =>
-      [a.name ? inline(a.name) : undefined, a.ror ? `ROR ${a.ror}` : undefined]
+      [a.name ? inline(a.name) : undefined, a.ror ? `ROR ${inline(a.ror)}` : undefined]
         .filter(Boolean)
         .join(' '),
     )
@@ -506,7 +506,7 @@ export const getRecord = tool('zenodo_get_record', {
     const t = result.tombstone;
     if (t) {
       lines.push(
-        `**Tombstone:** removed ${t.removal_date ?? 'on an unrecorded date'}; reason: ${t.removal_reason ? inline(t.removal_reason) : 'not given'}`,
+        `**Tombstone:** removed ${inline(t.removal_date ?? 'on an unrecorded date')}; reason: ${t.removal_reason ? inline(t.removal_reason) : 'not given'}`,
       );
       if (t.note) lines.push(quoteBlock(t.note, 'Removal note (untrusted):'));
       if (t.citation_text)
@@ -520,14 +520,16 @@ export const getRecord = tool('zenodo_get_record', {
         `**Record:** ${r.recid}${r.concept_recid ? ` | **Concept record:** ${r.concept_recid}` : ''} | **URL:** ${r.zenodo_url}`,
       );
       const ids = [
-        r.doi ? `**DOI:** ${r.doi}${r.doi_provider ? ` (${r.doi_provider})` : ''}` : undefined,
-        r.concept_doi ? `**Concept DOI:** ${r.concept_doi}` : undefined,
-        r.oai_id ? `**OAI:** ${r.oai_id}` : undefined,
+        r.doi
+          ? `**DOI:** ${inline(r.doi)}${r.doi_provider ? ` (${inline(r.doi_provider)})` : ''}`
+          : undefined,
+        r.concept_doi ? `**Concept DOI:** ${inline(r.concept_doi)}` : undefined,
+        r.oai_id ? `**OAI:** ${inline(r.oai_id)}` : undefined,
       ].filter(Boolean);
       if (ids.length) lines.push(ids.join(' | '));
       const facts = [
         r.resource_type
-          ? `**Type:** ${r.resource_type.title ? `${inline(r.resource_type.title)} ` : ''}(${r.resource_type.id})`
+          ? `**Type:** ${r.resource_type.title ? `${inline(r.resource_type.title)} ` : ''}(${inline(r.resource_type.id)})`
           : undefined,
         r.publication_date ? `**Published:** ${inline(r.publication_date)}` : undefined,
         r.version ? `**Version:** ${inline(r.version)}` : undefined,
@@ -542,14 +544,14 @@ export const getRecord = tool('zenodo_get_record', {
       );
       const a = r.access;
       lines.push(
-        `**Access:** ${a.status}${a.record ? `, record ${a.record}` : ''}${a.files ? `, files ${a.files}` : ''}; embargo active: ${a.embargo_active}${a.embargo_until ? `, until ${a.embargo_until}` : ''}${a.embargo_reason ? `, reason: ${inline(a.embargo_reason)}` : ''}`,
+        `**Access:** ${inline(a.status)}${a.record ? `, record ${inline(a.record)}` : ''}${a.files ? `, files ${inline(a.files)}` : ''}; embargo active: ${a.embargo_active}${a.embargo_until ? `, until ${inline(a.embargo_until)}` : ''}${a.embargo_reason ? `, reason: ${inline(a.embargo_reason)}` : ''}`,
       );
       if (r.rights.length) {
         lines.push(
           `**Rights:** ${r.rights
             .map(
               (x) =>
-                `${inline(x.title)}${x.id ? ` (${x.id})` : ''}${x.url ? ` ${inline(x.url)}` : ''}`,
+                `${inline(x.title)}${x.id ? ` (${inline(x.id)})` : ''}${x.url ? ` ${inline(x.url)}` : ''}`,
             )
             .join('; ')}`,
         );
@@ -582,7 +584,7 @@ export const getRecord = tool('zenodo_get_record', {
         for (const f of r.funding) {
           const funder = [
             f.funder_name ? inline(f.funder_name) : undefined,
-            f.funder_id ? `(${f.funder_id})` : undefined,
+            f.funder_id ? `(${inline(f.funder_id)})` : undefined,
           ]
             .filter(Boolean)
             .join(' ');
@@ -611,7 +613,7 @@ export const getRecord = tool('zenodo_get_record', {
         lines.push('', `### Related identifiers (${r.related_identifier_count})`);
         for (const x of r.related_identifiers) {
           lines.push(
-            `- ${x.relation ?? 'related'}: ${inline(x.identifier)}${x.scheme ? ` (${x.scheme})` : ''}${x.resource_type ? ` [${x.resource_type}]` : ''}`,
+            `- ${inline(x.relation ?? 'related')}: ${inline(x.identifier)}${x.scheme ? ` (${inline(x.scheme)})` : ''}${x.resource_type ? ` [${inline(x.resource_type)}]` : ''}`,
           );
         }
       }
@@ -642,7 +644,7 @@ export const getRecord = tool('zenodo_get_record', {
       );
       for (const f of files.entries) {
         lines.push(
-          `- ${inline(f.key)} — ${f.size ?? '?'} bytes${f.mimetype ? `, ${f.mimetype}` : ''}${f.md5 ? `, md5 ${f.md5}` : ''} — ${f.download_url}`,
+          `- ${inline(f.key)} — ${f.size ?? '?'} bytes${f.mimetype ? `, ${inline(f.mimetype)}` : ''}${f.md5 ? `, md5 ${inline(f.md5)}` : ''} — ${f.download_url}`,
         );
       }
     }
