@@ -7,7 +7,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.1.1-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/zenodo-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.0.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/zenodo-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/zenodo-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.0-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.1.1-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/zenodo-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.2.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/zenodo-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/zenodo-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -19,11 +19,17 @@
 
 </div>
 
+<div align="center">
+
+**Public Hosted Server:** [https://zenodo.caseyjhand.com/mcp](https://zenodo.caseyjhand.com/mcp)
+
+</div>
+
 ---
 
 ## Overview
 
-Datasets, software releases, and publications from Zenodo, CERN's open research repository, over its public REST API. Search deposits with filters for funder, grant, community, license, and file type; resolve any Zenodo DOI, concept DOI, or URL to its record; walk a deposit's versions; and list, open, and preview its files, including members of `.zip` archives. Runs as a stdio process or a local Streamable HTTP server.
+Datasets, software releases, and publications from Zenodo, CERN's open research repository, over its public REST API. Search deposits with filters for funder, grant, community, license, and file type; resolve any Zenodo DOI, concept DOI, or URL to its record; walk a deposit's versions; and list, open, and preview its files, including members of `.zip` archives. Runs as a stdio process, a local Streamable HTTP server, or the public hosted endpoint above.
 
 ### Tools
 
@@ -111,6 +117,25 @@ Agent-friendly output:
 - Fields Zenodo omits stay absent rather than defaulting to `0`, `''`, or `false`
 
 ## Getting started
+
+### Public Hosted Instance
+
+A public instance is available at `https://zenodo.caseyjhand.com/mcp` — no installation required. Point any MCP client at it via Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "zenodo-mcp-server": {
+      "type": "streamable-http",
+      "url": "https://zenodo.caseyjhand.com/mcp"
+    }
+  }
+}
+```
+
+The hosted instance runs without a token, so every caller shares Zenodo's anonymous rate limit. For sustained use, run your own instance with `ZENODO_ACCESS_TOKEN` set.
+
+### Self-Hosted / Local
 
 Add the following to your MCP client configuration file.
 
