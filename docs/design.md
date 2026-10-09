@@ -660,8 +660,8 @@ The search budget is stated without "anonymous": the search pacer holds 25/min w
 1. **Setup and config.**
    - Run the `setup` skill: remove the echo tool, app tool, resources, and prompt.
    - `src/config/server-config.ts` (above).
-   - `src/index.ts`: `createApp({ name: 'zenodo-mcp-server', title: 'zenodo-mcp-server', instructions, tools, setup, teardown })`. The identity block is `name` + `title` only, bare hyphenated, never Title Case; no other identity fields.
-   - No `ctx.requestInput` anywhere, so no `sessionMode` requirement.
+   - `src/index.ts`: `createApp({ name: 'zenodo-mcp-server', title: 'zenodo-mcp-server', instructions, tools, sessionMode: 'stateless', setup, teardown })`. The identity block is `name` + `title` only, bare hyphenated, never Title Case; no other identity fields.
+   - No `ctx.requestInput` anywhere, so the session mode is `stateless` with no `require: 'stateful'`.
    - Drop the "larger page sizes" claim from the `ZENODO_ACCESS_TOKEN` descriptions in `server.json`, `manifest.json`, and `.claude-plugin/plugin.json`, since page size stays 25 with a token.
 2. **Pure modules + unit tests.** `identifiers.ts`, `query-builder.ts`, `html-to-text.ts`, `text-preview.ts`, `resource-types.ts`, `render.ts` (`inline`, `quoteBlock`, `fence`).
 3. **Service.** `http.ts` (boundary, accept-lists, header gate, pacers), `cache.ts`, `normalize.ts`, `zenodo-service.ts`; tests against `createFetchMock`.

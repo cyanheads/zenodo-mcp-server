@@ -2,9 +2,9 @@
 
 **Server:** zenodo-mcp-server
 **Version:** 0.1.1
-**Framework:** [@cyanheads/mcp-ts-core](https://www.npmjs.com/package/@cyanheads/mcp-ts-core) `^0.13.6`
+**Framework:** [@cyanheads/mcp-ts-core](https://www.npmjs.com/package/@cyanheads/mcp-ts-core) `^0.13.14`
 **Engines:** Bun ≥1.4.0, Node ≥24.0.0
-**MCP SDK:** `@modelcontextprotocol/server` ^2.0.0
+**MCP SDK:** `@modelcontextprotocol/server` ^2.2.0
 **Zod:** ^4.6.5
 
 > **Read the framework docs first:** `node_modules/@cyanheads/mcp-ts-core/CLAUDE.md` contains the full API reference — builders, Context, error codes, exports, patterns. This file covers server-specific conventions only.
@@ -102,7 +102,7 @@ export const listVersions = tool('zenodo_list_versions', {
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
+      throw ctx.fail('invalid_identifier', ref.message);
     }
     const service = getZenodoService();
     // … resolve an external DOI; on a miss return { found: false, ...notOnZenodoMiss(doi), … }
@@ -164,6 +164,7 @@ await createApp({
   title: 'zenodo-mcp-server',
   instructions: "Zenodo is CERN's open research repository … metadata is CC0 and each file keeps its deposit's license.",
   tools: allToolDefinitions,
+  sessionMode: 'stateless',
   setup(core) {
     initZenodoService(core.config);
   },
@@ -175,7 +176,7 @@ await createApp({
 
 The identity block is `name` + `title` only, both the bare hyphenated `zenodo-mcp-server` — never Title Case, never the npm scope, and never a duplicated `description` (it derives from `package.json`). `instructions` is session-level orientation sent on every `initialize`; keep it in step with the tool descriptions. `setup()` builds the service (pacers, cache, a User-Agent carrying the server version); `teardown()` disposes the pacers' timers.
 
-No handler calls `ctx.requestInput`, so no `sessionMode` requirement is declared; the Dockerfile and `.env.example` run HTTP as `stateless`.
+`sessionMode: 'stateless'` declares the HTTP session posture in source: no handler calls `ctx.requestInput`, so nothing needs a session, and no `require: 'stateful'` is set. The Dockerfile and `.env.example` set `MCP_SESSION_MODE=stateless` to match; a deployment's own `MCP_SESSION_MODE` still wins when it carries a value.
 
 ---
 
@@ -187,9 +188,9 @@ Handlers receive a unified `ctx` object. The properties this server uses:
 |:---------|:------------|
 | `ctx.log` | Request-scoped logger — `.debug()`, `.info()`, `.notice()`, `.warning()`, `.error()`. Auto-correlates requestId, traceId, tenantId. Dual-sink: Pino **and** `notifications/message` to the client, so treat it as client-visible. |
 | `ctx.enrich` | Success-path agent context — `ctx.enrich(...)` or `.notice()` / `.total()` / `.echo()` / `.truncated()`. Every tool declares an `enrichment` block; see *Enrichment defaults first*. |
-| `ctx.fail` / `ctx.recoveryFor` | Throw a declared error-contract reason with its recovery hint: `throw ctx.fail('reason', message, ctx.recoveryFor('reason'))`. |
+| `ctx.fail` | Throw a declared error-contract reason: `throw ctx.fail('reason', message)`. The framework adds the reason's declared recovery hint. |
 | `ctx.signal` | `AbortSignal` for cancellation — the service threads it into every upstream request and pacer wait. |
-| `ctx.requestId` | Unique request ID. |
+| `ctx.requestId` | Request ID — the one every log record of the call carries and its error envelope returns as `data.requestId`. |
 | `ctx.tenantId` | Tenant ID from JWT; `'default'` for stdio or HTTP with auth off. |
 
 `ctx.state`, `ctx.requestInput` / `ctx.inputs`, and `ctx.content` are unused: responses are cached process-wide in the service, no tool asks for input mid-call, and every tool returns text.
@@ -200,7 +201,7 @@ Handlers receive a unified `ctx` object. The properties this server uses:
 
 Handlers throw — the framework catches, classifies, and formats.
 
-**Typed error contract.** Every tool declares `errors: [{ reason, code, when, recovery, retryable?, thrownBy? }]` inline and throws with `ctx.fail(reason, …, ctx.recoveryFor(reason))`. `when` is model-facing text (the framework advertises it), so write it for the calling model — no implementation terms like "record GET" or "pacer shed". `recovery` names the next tool call. Reasons the service throws (`rate_limited`, `record_unavailable`, `upstream_timeout`, `query_failed`, `archive_unavailable`) carry `thrownBy: 'service'`. Baseline codes (`InternalError`, `ServiceUnavailable`, `Timeout`, `ValidationError`, `SerializationError`, `RequestCancelled`) bubble freely and don't need declaring.
+**Typed error contract.** Every tool declares `errors: [{ reason, code, when, recovery, retryable?, thrownBy? }]` inline and throws with `ctx.fail(reason, …)`; services throw with `data: { reason }`. The framework puts the declared `recovery` on the wire whenever a failure carrying that `reason` arrives without a hint — as `data.recovery.hint`, mirrored into `content[]` text unless the message already contains it verbatim; pass an explicit `{ recovery: { hint: '…' } }` only when runtime context changes the next move. Every error envelope also carries `data.requestId`, and `content[]` closes with `(reason … · request <id>)`. `when` is model-facing text (the framework advertises it), so write it for the calling model — no implementation terms like "record GET" or "pacer shed". `recovery` names the next tool call. Reasons the service throws (`rate_limited`, `record_unavailable`, `upstream_timeout`, `query_failed`, `archive_unavailable`) carry `thrownBy: 'service'`. Baseline codes (`InternalError`, `ServiceUnavailable`, `Timeout`, `ValidationError`, `SerializationError`, `RequestCancelled`) bubble freely and don't need declaring.
 
 ```ts
 errors: [
@@ -211,7 +212,7 @@ errors: [
 async handler(input, ctx) {
   const community = ref ? await service.getCommunity(ref, ctx) : undefined;
   if (!community) {
-    throw ctx.fail('unknown_community', `No Zenodo community matches "${inline(input.community)}" …`, ctx.recoveryFor('unknown_community'));
+    throw ctx.fail('unknown_community', `No Zenodo community matches "${inline(input.community)}" …`);
   }
 }
 ```
@@ -394,7 +395,7 @@ security: false                            # optional — true ONLY for a source
 
 ## Publishing
 
-**Every release goes through a release PR, straight-through** — `git-wrapup`'s "Release PR mode", mode `straight-through`. One run: `git-wrapup` lands the commit stack on `release/<version>`, pushes it, and opens the PR (title = the release commit subject, body = the changelog entry plus a gates section); `release-and-publish` then fast-forwards `main` locally with `git merge --ff-only`, creates the tag on `main`'s tip, pushes `main` and the tag, deletes the branch, and publishes. A caller's brief may run a given release as `gated` instead — a `release-pr-review` pass on the open PR before `release-and-publish`. **Never merge through the GitHub UI or `gh pr merge`**: squash and rebase-merge are disabled in the repo settings because both rewrite the stack (rebase-merge also strips the SSH signatures), and a merge commit breaks the linear history.
+**Every release goes through a release PR, straight-through** — `git-wrapup`'s "Release PR mode", mode `straight-through`. One run: `git-wrapup` lands the commit stack on `release/<version>`, pushes it, and opens the PR (title = the release commit subject, body = the release digest: theme line, `## Changes`, `## Gates`, changelog link last); `release-and-publish` then fast-forwards `main` locally with `git merge --ff-only`, creates the tag on `main`'s tip, pushes `main` and the tag, deletes the branch, and publishes. A caller's brief may run a given release as `gated` instead — a `release-pr-review` pass on the open PR before `release-and-publish`. **Never merge through the GitHub UI or `gh pr merge`**: squash and rebase-merge are disabled in the repo settings because both rewrite the stack (rebase-merge also strips the SSH signatures), and a merge commit breaks the linear history.
 
 **Identity across publish surfaces.** The npm name `@cyanheads/zenodo-mcp-server` appears on install surfaces: the README `<h1>`, the npm and install badges, and every `bunx` / `npx -y` argument. `mcpName` and the `server.json` `name` are `io.github.cyanheads/zenodo-mcp-server`. Everywhere else — `createApp()`, `manifest.json` `name`, plugin names and server keys, the Docker image, the `.mcpb` file — it is the bare `zenodo-mcp-server`. `lint:packaging` enforces the split.
 
@@ -419,7 +420,7 @@ import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
 - [ ] Optional inputs wrapped with `blankToUndefined` / `toOptionalArray` / `enumPreprocess`, never `.min(1)` on an optional field
 - [ ] JSDoc `@fileoverview` + `@module` on every file
 - [ ] `ctx.log` for logging; upstream data cached in the service, not `ctx.state`
-- [ ] Handlers throw on failure via declared contract reasons (`ctx.fail` + `ctx.recoveryFor`), no try/catch
+- [ ] Handlers throw on failure via declared contract reasons (`ctx.fail`), no try/catch
 - [ ] Every upstream call goes through `getZenodoService()` — no direct `fetch`, no caller-supplied host
 - [ ] `format()` renders all data the LLM needs — different clients forward different surfaces (Claude Code → `structuredContent`, Claude Desktop → `content[]`); both must carry the same data
 - [ ] Depositor-supplied text in `format()` passes through `inline()` / `quoteBlock()` / `fence()`
