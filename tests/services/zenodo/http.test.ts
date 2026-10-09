@@ -8,7 +8,7 @@
  * @module tests/services/zenodo/http.test
  */
 
-import { type ErrorContract, JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
 import {
   createFetchMock,
   createMockContext,
@@ -38,47 +38,6 @@ import {
 /** The fixed clock every test starts from (a whole second, so reset math is exact). */
 const NOW = new Date('2026-09-23T12:00:00Z');
 const UA = 'zenodo-mcp-server/0.0.0-test (+https://github.com/cyanheads/zenodo-mcp-server)';
-
-/** The reasons the boundary throws, with the recovery strings the design fixes. */
-const CONTRACT = [
-  {
-    reason: 'query_failed',
-    code: JsonRpcErrorCode.ServiceUnavailable,
-    when: 'search 500',
-    recovery:
-      'Simplify the query (quote phrases, escape : and / with a backslash, or move identifiers into the dedicated filters) and call zenodo_search_records again; if a plain keyword query also fails, Zenodo is degraded, so retry in a few minutes.',
-  },
-  {
-    reason: 'upstream_timeout',
-    code: JsonRpcErrorCode.Timeout,
-    when: 'search or versions timed out',
-    recovery:
-      'Call zenodo_search_records again with a smaller size (5) or narrower filters so the page holds fewer large deposits.',
-  },
-  {
-    reason: 'record_unavailable',
-    code: JsonRpcErrorCode.ServiceUnavailable,
-    when: 'record 500 twice or slow 504',
-    recovery:
-      'Look the record up with zenodo_search_records using query doi:"<its DOI>" (all_versions true) or its title.',
-  },
-  {
-    reason: 'archive_unavailable',
-    code: JsonRpcErrorCode.ServiceUnavailable,
-    when: 'container or member 500 twice, or no complete response',
-    recovery: 'Download the archive from the URL in the error message and open it locally.',
-  },
-  {
-    reason: 'rate_limited',
-    code: JsonRpcErrorCode.RateLimited,
-    when: '429, header gate, or pacer shed',
-    recovery:
-      'Wait for the retryAfter seconds in the error data, then call the tool again with the same arguments.',
-  },
-] as const satisfies readonly ErrorContract[];
-
-const hint = (reason: (typeof CONTRACT)[number]['reason']) =>
-  CONTRACT.find((c) => c.reason === reason)?.recovery;
 
 function recordReq(recid = '22705923', over: Partial<ZenodoRequest> = {}): ZenodoRequest {
   return {
@@ -121,14 +80,14 @@ const hitsBody = { hits: { hits: [], total: 0 } };
 
 let fm: FetchMockHarness;
 let http: ZenodoHttp;
-let ctx: ReturnType<typeof createMockContext<typeof CONTRACT>>;
+let ctx: ReturnType<typeof createMockContext>;
 
 beforeEach(() => {
   vi.useFakeTimers({ now: NOW });
   fm = createFetchMock();
   fm.install();
   http = new ZenodoHttp({ userAgent: UA });
-  ctx = createMockContext({ errors: CONTRACT });
+  ctx = createMockContext();
 });
 
 afterEach(() => {
@@ -363,7 +322,6 @@ describe('retry matrix — HTTP 500', () => {
       reason: 'query_failed',
       status: 500,
       retryable: false,
-      recovery: { hint: hint('query_failed') },
     });
     expect(fm.calls).toHaveLength(1);
   });
@@ -391,7 +349,6 @@ describe('retry matrix — HTTP 500', () => {
       reason: 'record_unavailable',
       status: 500,
       retryAttempts: 2,
-      recovery: { hint: hint('record_unavailable') },
     });
     expect(fm.calls).toHaveLength(2);
   });
@@ -471,7 +428,6 @@ describe('retry matrix — HTTP 500', () => {
       reason: 'archive_unavailable',
       status: 500,
       retryAttempts: 2,
-      recovery: { hint: hint('archive_unavailable') },
     });
     expect(err.data).not.toHaveProperty('retryAfter');
     expect(err.message).toContain(
@@ -540,11 +496,7 @@ describe('retry matrix — 502/503/504, network errors, timeouts', () => {
     });
     const err = errorOf(await drive(http.request(recordReq('2594613'), readStatus, ctx)));
     expect(err.code).toBe(JsonRpcErrorCode.ServiceUnavailable);
-    expect(err.data).toMatchObject({
-      reason: 'record_unavailable',
-      retryable: false,
-      recovery: { hint: hint('record_unavailable') },
-    });
+    expect(err.data).toMatchObject({ reason: 'record_unavailable', retryable: false });
     expect(fm.calls).toHaveLength(1);
   });
 
@@ -555,11 +507,7 @@ describe('retry matrix — 502/503/504, network errors, timeouts', () => {
     });
     const err = errorOf(await drive(http.request(searchReq(), readStatus, ctx)));
     expect(err.code).toBe(JsonRpcErrorCode.Timeout);
-    expect(err.data).toMatchObject({
-      reason: 'upstream_timeout',
-      retryable: false,
-      recovery: { hint: hint('upstream_timeout') },
-    });
+    expect(err.data).toMatchObject({ reason: 'upstream_timeout', retryable: false });
     expect(fm.calls).toHaveLength(1);
   });
 
@@ -665,7 +613,7 @@ describe('retry matrix — 502/503/504, network errors, timeouts', () => {
 
   it('surfaces a caller cancellation as-is, without retrying', async () => {
     const controller = new AbortController();
-    const cancelCtx = createMockContext({ errors: CONTRACT, signal: controller.signal });
+    const cancelCtx = createMockContext({ signal: controller.signal });
     fm.route({ match: onPath('/records/1'), respond: hangUntilAborted });
     const pending = settle(http.request(recordReq('1'), readStatus, cancelCtx));
     await vi.advanceTimersByTimeAsync(100);
@@ -713,7 +661,6 @@ describe('retry matrix — 429', () => {
       reason: 'rate_limited',
       status: 429,
       retryAfter: 60,
-      recovery: { hint: hint('rate_limited') },
     });
     expect(fm.calls).toHaveLength(1);
   });
@@ -771,11 +718,7 @@ describe('header gate', () => {
 
     const err = errorOf(await settle(http.request(recordReq('1'), readStatus, ctx)));
     expect(err.code).toBe(JsonRpcErrorCode.RateLimited);
-    expect(err.data).toMatchObject({
-      reason: 'rate_limited',
-      retryAfter: 30,
-      recovery: { hint: hint('rate_limited') },
-    });
+    expect(err.data).toMatchObject({ reason: 'rate_limited', retryAfter: 30 });
     expect(fm.calls).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(30_001);
@@ -839,11 +782,7 @@ describe('pacers', () => {
 
     const shed = errorOf(await settle(http.request(searchReq(), readStatus, ctx)));
     expect(shed.code).toBe(JsonRpcErrorCode.RateLimited);
-    expect(shed.data).toMatchObject({
-      reason: 'rate_limited',
-      retryAfter: 60,
-      recovery: { hint: hint('rate_limited') },
-    });
+    expect(shed.data).toMatchObject({ reason: 'rate_limited', retryAfter: 60 });
     expect(fm.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
       '/api/records',
       '/api/records/22705923',

@@ -182,13 +182,12 @@ export const listVersions = tool('zenodo_list_versions', {
       throw ctx.fail(
         'result_window_exceeded',
         `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} versions Zenodo pages through.`,
-        ctx.recoveryFor('result_window_exceeded'),
       );
     }
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
+      throw ctx.fail('invalid_identifier', ref.message);
     }
     const service = getZenodoService();
     const inputKind = ref.inputKind;

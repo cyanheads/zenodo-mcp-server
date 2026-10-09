@@ -9,7 +9,7 @@
  */
 
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
-import { JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import {
   createFetchMock,
   createMockContext,
@@ -22,6 +22,7 @@ import { getRecord } from '@/mcp-server/tools/definitions/get-record.tool.js';
 import type { RawRecord } from '@/services/zenodo/types.js';
 import { disposeZenodoService, initZenodoService } from '@/services/zenodo/zenodo-service.js';
 import {
+  contractFailure,
   fixture,
   fixtureText,
   jsonResponse,
@@ -30,7 +31,6 @@ import {
   RDM,
   rateHeaders,
   recordFixture,
-  settle,
   textResponse,
   withFiles,
 } from '../../../helpers/zenodo-fixtures.js';
@@ -81,15 +81,9 @@ async function call(input: Record<string, unknown>) {
   return { result, ctx, enrichment: getEnrichment(ctx) };
 }
 
-async function failure(input: Record<string, unknown>, advanceMs = 0): Promise<McpError> {
-  const ctx = createMockContext({ errors: getRecord.errors });
-  const pending = settle(getRecord.handler(getRecord.input.parse(input), ctx));
-  if (advanceMs) await vi.advanceTimersByTimeAsync(advanceMs);
-  const outcome = await pending;
-  if (outcome.ok) throw new Error('expected the handler to throw');
-  expect(outcome.error).toBeInstanceOf(McpError);
-  return outcome.error as McpError;
-}
+/** Fails through runToolContract, which fills the declared recovery hint as production does. */
+const failure = (input: Record<string, unknown>, advanceMs = 0) =>
+  contractFailure(getRecord, input, advanceMs);
 
 function textOf(result: Awaited<ReturnType<typeof call>>['result']): string {
   const block = getRecord.format?.(result)[0] as { text: string } | undefined;

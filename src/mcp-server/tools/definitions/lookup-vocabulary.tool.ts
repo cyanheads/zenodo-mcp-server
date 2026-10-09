@@ -248,14 +248,12 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
       throw ctx.fail(
         'funder_only_for_awards',
         `funder applies only to vocabulary awards, not ${input.vocabulary}.`,
-        ctx.recoveryFor('funder_only_for_awards'),
       );
     }
     if (input.page * input.size > RESULT_WINDOW) {
       throw ctx.fail(
         'result_window_exceeded',
         `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} entries.`,
-        ctx.recoveryFor('result_window_exceeded'),
       );
     }
 
@@ -281,7 +279,6 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
           throw ctx.fail(
             'unknown_funder',
             `"${inline(input.funder)}" is not a known ROR id and no funder carries that Crossref Funder DOI.`,
-            ctx.recoveryFor('unknown_funder'),
           );
         }
         funderRor = funder.ror_id;

@@ -38,7 +38,8 @@ const PARTIAL_DATE_PATTERN = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?
  * (any case; `publication::publication-article` → `publication-article`). A value
  * that names no resource type raises its own issue here rather than reaching the
  * enum: the enum's issue would point at an array index a lone-string input never
- * had, and read as a missing field.
+ * had, and read as a missing field. The routing comes before the id list, since the
+ * framework cuts an issue line at 1,024 characters and the list alone is 811.
  */
 const resourceTypeInput = z.preprocess((v, ctx) => {
   const arr = toOptionalArray(v);
@@ -50,7 +51,7 @@ const resourceTypeInput = z.preprocess((v, ctx) => {
     ctx.addIssue({
       code: 'custom',
       input: v,
-      message: `${unknown.map((x) => JSON.stringify(x.slice(0, 100))).join(', ')} ${unknown.length > 1 ? 'are not Zenodo resource type ids' : 'is not a Zenodo resource type id'}. Expected one of: ${RESOURCE_TYPE_IDS.join(', ')} (a subtype may also be written <type>::<id>, e.g. publication::publication-article). Look types up with zenodo_lookup_vocabulary (vocabulary: resource_types).`,
+      message: `${unknown.map((x) => JSON.stringify(x.slice(0, 100))).join(', ')} ${unknown.length > 1 ? 'are not Zenodo resource type ids' : 'is not a Zenodo resource type id'}. Look types up with zenodo_lookup_vocabulary (vocabulary: resource_types), or pass one of these ids (a subtype also as <type>::<id>): ${RESOURCE_TYPE_IDS.join(', ')}.`,
     });
     return z.NEVER;
   }
@@ -436,21 +437,18 @@ export const searchRecords = tool('zenodo_search_records', {
       throw ctx.fail(
         'result_window_exceeded',
         `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} matches.`,
-        ctx.recoveryFor('result_window_exceeded'),
       );
     }
     if (input.query && isWholeIdentifier(input.query)) {
       throw ctx.fail(
         'query_is_identifier',
         `The query "${inline(input.query)}" is a record identifier, not search terms.`,
-        ctx.recoveryFor('query_is_identifier'),
       );
     }
     if (input.query && hasUnpairedSlash(input.query)) {
       throw ctx.fail(
         'query_syntax',
         'The query has an unpaired / outside quotes, which Zenodo parses as an unterminated regular expression.',
-        ctx.recoveryFor('query_syntax'),
       );
     }
 
@@ -464,7 +462,6 @@ export const searchRecords = tool('zenodo_search_records', {
       throw ctx.fail(
         'invalid_date_range',
         `published_from ${publishedFrom} is after published_to ${publishedTo}.`,
-        ctx.recoveryFor('invalid_date_range'),
       );
     }
 
@@ -478,7 +475,6 @@ export const searchRecords = tool('zenodo_search_records', {
         throw ctx.fail(
           'unknown_community',
           `No Zenodo community matches "${inline(input.community)}" as a slug, UUID, or community URL.`,
-          ctx.recoveryFor('unknown_community'),
         );
       }
       communityId = community.uuid;
@@ -492,7 +488,6 @@ export const searchRecords = tool('zenodo_search_records', {
         throw ctx.fail(
           'unknown_funder',
           `"${inline(input.funder)}" is not a known ROR id and no funder carries that Crossref Funder DOI.`,
-          ctx.recoveryFor('unknown_funder'),
         );
       }
       funderRor = funder.ror_id;

@@ -438,7 +438,7 @@ export const getRecord = tool('zenodo_get_record', {
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
-      throw ctx.fail('invalid_identifier', ref.message, ctx.recoveryFor('invalid_identifier'));
+      throw ctx.fail('invalid_identifier', ref.message);
     }
     const service = getZenodoService();
     const inputKind = ref.inputKind;

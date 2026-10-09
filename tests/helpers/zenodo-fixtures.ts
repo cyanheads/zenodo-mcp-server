@@ -1,12 +1,15 @@
 /**
  * @fileoverview Shared test fixtures for the Zenodo service and tools: loaders for
  * the trimmed upstream bodies captured from zenodo.org (tests/fixtures/zenodo),
- * response builders carrying Zenodo's rate-limit headers, and request matchers for
- * `createFetchMock` routes.
+ * response builders carrying Zenodo's rate-limit headers, request matchers for
+ * `createFetchMock` routes, and a `runToolContract` failure reader.
  * @module tests/helpers/zenodo-fixtures
  */
 
 import { readFileSync } from 'node:fs';
+import { type JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
+import { runToolContract } from '@cyanheads/mcp-ts-core/testing';
+import { vi } from 'vitest';
 import type { RawRecord } from '@/services/zenodo/types.js';
 
 const FIXTURE_DIR = new URL('../fixtures/zenodo/', import.meta.url);
@@ -206,6 +209,30 @@ export function containerBody(
     total: files,
     truncated: files + directories >= 1000,
   };
+}
+
+type ContractDefinition = Parameters<typeof runToolContract>[0];
+
+/**
+ * Calls a tool through `runToolContract` — the production pipeline, which fills a
+ * declared reason's recovery hint — advancing fake timers by `advanceMs` while it
+ * runs, and returns the error envelope it answered with as an `McpError`.
+ */
+export async function contractFailure<D extends ContractDefinition>(
+  definition: D,
+  input: Record<string, unknown>,
+  advanceMs = 0,
+): Promise<McpError> {
+  const pending = runToolContract(definition, input as Parameters<typeof runToolContract<D>>[1]);
+  if (advanceMs) await vi.advanceTimersByTimeAsync(advanceMs);
+  const result = await pending;
+  if (!result.isError) throw new Error('expected the tool call to fail');
+  const { code, message, data } = (
+    result.structuredContent as {
+      error: { code: JsonRpcErrorCode; data?: Record<string, unknown>; message: string };
+    }
+  ).error;
+  return new McpError(code, message, data);
 }
 
 /**

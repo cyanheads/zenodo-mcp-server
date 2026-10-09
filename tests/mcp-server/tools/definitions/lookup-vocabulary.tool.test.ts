@@ -10,7 +10,7 @@
 
 import { z } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
-import { JsonRpcErrorCode, McpError } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import {
   createFetchMock,
   createMockContext,
@@ -22,12 +22,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lookupVocabulary } from '@/mcp-server/tools/definitions/lookup-vocabulary.tool.js';
 import { disposeZenodoService, initZenodoService } from '@/services/zenodo/zenodo-service.js';
 import {
+  contractFailure,
   fixture,
   jsonResponse,
   onPath,
   queryOf,
   rateHeaders,
-  settle,
   textResponse,
 } from '../../../helpers/zenodo-fixtures.js';
 
@@ -61,13 +61,8 @@ async function call(input: Record<string, unknown>) {
   return { result, enrichment: getEnrichment(ctx) };
 }
 
-async function failure(input: Record<string, unknown>): Promise<McpError> {
-  const ctx = createMockContext({ errors: lookupVocabulary.errors });
-  const outcome = await settle(lookupVocabulary.handler(lookupVocabulary.input.parse(input), ctx));
-  if (outcome.ok) throw new Error('expected the handler to throw');
-  expect(outcome.error).toBeInstanceOf(McpError);
-  return outcome.error as McpError;
-}
+/** Fails through runToolContract, which fills the declared recovery hint as production does. */
+const failure = (input: Record<string, unknown>) => contractFailure(lookupVocabulary, input);
 
 function textOf(result: Parameters<NonNullable<typeof lookupVocabulary.format>>[0]): string {
   const block = lookupVocabulary.format?.(result)[0] as { text: string } | undefined;

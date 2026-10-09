@@ -221,7 +221,7 @@ export class ZenodoHttp {
     ctx: Context,
   ): Promise<T> {
     try {
-      return await withRetry((attempt) => this.#paced(req, read, ctx, attempt), {
+      return await withRetry((attempt) => this.#paced(req, read, attempt), {
         maxRetries: 1,
         baseDelayMs: 1_000,
         maxDelayMs: 15_000,
@@ -240,12 +240,11 @@ export class ZenodoHttp {
           {
             reason: 'rate_limited',
             ...(retryAfter !== undefined ? { retryAfter } : {}),
-            ...ctx.recoveryFor('rate_limited'),
           },
           { cause: error },
         );
       }
-      if (reason === 'retry_deadline_exceeded') throw this.#timeoutError(req, ctx, error);
+      if (reason === 'retry_deadline_exceeded') throw this.#timeoutError(req, error);
       throw error;
     }
   }
@@ -253,12 +252,10 @@ export class ZenodoHttp {
   #paced<T>(
     req: ZenodoRequest,
     read: (res: Response) => Promise<T>,
-    ctx: Context,
     attempt: RetryAttempt,
   ): Promise<T> {
     const options = { signal: attempt.signal, maxWaitMs: PACER_MAX_WAIT_MS };
-    const task = (signal: AbortSignal) =>
-      this.#dispatch(req, read, ctx, signal, attempt.remainingMs);
+    const task = (signal: AbortSignal) => this.#dispatch(req, read, signal, attempt.remainingMs);
     if (req.bucket === 'general') return this.#general.run(task, options);
     // A search also counts against the global budget: reserve a general start slot,
     // then run in the search pacer, so a search 429 closes only the search gate.
@@ -270,11 +267,10 @@ export class ZenodoHttp {
   async #dispatch<T>(
     req: ZenodoRequest,
     read: (res: Response) => Promise<T>,
-    ctx: Context,
     signal: AbortSignal,
     remainingMs: number,
   ): Promise<T> {
-    this.#checkGate(req.bucket, ctx);
+    this.#checkGate(req.bucket);
 
     const budget = Math.max(1, Math.min(req.attemptMs, remainingMs));
     const deadline = new AbortController();
@@ -283,12 +279,12 @@ export class ZenodoHttp {
     try {
       const res = await this.#fetchWithinZenodo(req, AbortSignal.any([signal, deadline.signal]));
       if (!req.okStatuses.includes(res.status)) {
-        throw await this.#statusError(req, res, ctx, Date.now() - started);
+        throw await this.#statusError(req, res, Date.now() - started);
       }
       return await read(res);
     } catch (error) {
       if (error instanceof McpError) throw error;
-      if (deadline.signal.aborted && !signal.aborted) throw this.#timeoutError(req, ctx, error);
+      if (deadline.signal.aborted && !signal.aborted) throw this.#timeoutError(req, error);
       if (signal.aborted) throw error;
       throw serviceUnavailable(
         `Zenodo request failed before a response arrived (${req.operation}).`,
@@ -362,7 +358,7 @@ export class ZenodoHttp {
   }
 
   /** Refuses to dispatch while the bucket's advertised window is spent. */
-  #checkGate(bucket: Bucket, ctx: Context): void {
+  #checkGate(bucket: Bucket): void {
     const { remaining, resetAt } = this.#headers[bucket];
     if (remaining === undefined || resetAt === undefined || remaining > 0) return;
     const waitMs = resetAt * 1000 - Date.now();
@@ -370,16 +366,10 @@ export class ZenodoHttp {
     throw rateLimited(`Zenodo's ${bucket} rate-limit window is spent until it resets.`, {
       reason: 'rate_limited',
       retryAfter: Math.ceil(waitMs / 1000),
-      ...ctx.recoveryFor('rate_limited'),
     });
   }
 
-  async #statusError(
-    req: ZenodoRequest,
-    res: Response,
-    ctx: Context,
-    elapsedMs: number,
-  ): Promise<McpError> {
+  async #statusError(req: ZenodoRequest, res: Response, elapsedMs: number): Promise<McpError> {
     const status = res.status;
     if (status === 429) {
       const reset = headerNumber(res.headers, 'x-ratelimit-reset');
@@ -391,14 +381,13 @@ export class ZenodoHttp {
         reason: 'rate_limited',
         status,
         ...(retryAfter !== undefined ? { retryAfter } : {}),
-        ...ctx.recoveryFor('rate_limited'),
       });
     }
 
     if (status >= 500) {
       await discardBody(res);
-      if (status === 504 && elapsedMs >= SLOW_GATEWAY_MS) return this.#timeoutError(req, ctx);
-      if (status === 500) return this.#serverError(req, ctx);
+      if (status === 504 && elapsedMs >= SLOW_GATEWAY_MS) return this.#timeoutError(req);
+      if (status === 500) return this.#serverError(req);
       return serviceUnavailable(`Zenodo answered HTTP ${status} (${req.operation}).`, { status });
     }
 
@@ -417,12 +406,7 @@ export class ZenodoHttp {
    * (after the one retry) or never finished. The message names the archive's
    * download URL, the path that still works.
    */
-  #archiveError(
-    req: ZenodoRequest,
-    ctx: Context,
-    failure: 'status_500' | 'timeout',
-    cause?: unknown,
-  ): McpError {
+  #archiveError(req: ZenodoRequest, failure: 'status_500' | 'timeout', cause?: unknown): McpError {
     const what = failure === 'status_500' ? 'HTTP 500' : 'no complete response in time';
     return new McpError(
       JsonRpcErrorCode.ServiceUnavailable,
@@ -430,57 +414,53 @@ export class ZenodoHttp {
       {
         reason: 'archive_unavailable',
         ...(failure === 'status_500' ? { status: 500 } : { retryable: false }),
-        ...ctx.recoveryFor('archive_unavailable'),
       },
       cause === undefined ? undefined : { cause },
     );
   }
 
   /** HTTP 500, per the retry matrix. */
-  #serverError(req: ZenodoRequest, ctx: Context): McpError {
+  #serverError(req: ZenodoRequest): McpError {
     switch (req.endpoint) {
       case 'search':
         return serviceUnavailable('Zenodo answered HTTP 500 for this search query.', {
           reason: 'query_failed',
           status: 500,
           retryable: false,
-          ...ctx.recoveryFor('query_failed'),
         });
       case 'doi_lookup':
         return serviceUnavailable('Zenodo answered HTTP 500 while resolving the DOI.', {
           reason: 'record_unavailable',
           status: 500,
           retryable: false,
-          ...ctx.recoveryFor('record_unavailable'),
         });
       case 'record':
       case 'versions':
         return serviceUnavailable('Zenodo answered HTTP 500 for this record.', {
           reason: 'record_unavailable',
           status: 500,
-          ...ctx.recoveryFor('record_unavailable'),
         });
       case 'archive':
-        return this.#archiveError(req, ctx, 'status_500');
+        return this.#archiveError(req, 'status_500');
       default:
         return serviceUnavailable(`Zenodo answered HTTP 500 (${req.operation}).`, { status: 500 });
     }
   }
 
   /** Slow 504, attempt timeout, or ladder deadline — deterministic for oversized payloads, never retried. */
-  #timeoutError(req: ZenodoRequest, ctx: Context, cause?: unknown): McpError {
+  #timeoutError(req: ZenodoRequest, cause?: unknown): McpError {
     const options = cause === undefined ? undefined : { cause };
     switch (req.endpoint) {
       case 'search':
         return timeout(
           'Zenodo did not finish the search page within its time budget; large file manifests in the hits make pages heavy.',
-          { reason: 'upstream_timeout', retryable: false, ...ctx.recoveryFor('upstream_timeout') },
+          { reason: 'upstream_timeout', retryable: false },
           options,
         );
       case 'versions':
         return timeout(
           'Zenodo did not finish the versions page within its time budget; the series holds large file manifests.',
-          { reason: 'upstream_timeout', retryable: false, ...ctx.recoveryFor('upstream_timeout') },
+          { reason: 'upstream_timeout', retryable: false },
           options,
         );
       case 'record':
@@ -488,15 +468,11 @@ export class ZenodoHttp {
         return new McpError(
           JsonRpcErrorCode.ServiceUnavailable,
           'Zenodo did not serve this record within its time budget (gateway cutoff or timeout).',
-          {
-            reason: 'record_unavailable',
-            retryable: false,
-            ...ctx.recoveryFor('record_unavailable'),
-          },
+          { reason: 'record_unavailable', retryable: false },
           options,
         );
       case 'archive':
-        return this.#archiveError(req, ctx, 'timeout', cause);
+        return this.#archiveError(req, 'timeout', cause);
       default:
         return timeout(
           `Zenodo did not respond within the time budget (${req.operation}).`,
