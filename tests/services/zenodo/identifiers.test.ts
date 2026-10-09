@@ -153,6 +153,7 @@ describe('parseRecordRef — rejected forms', () => {
     ['https://sandbox.zenodo.org/records/1', /different Zenodo instance/],
     ['sandbox.zenodo.org/records/1', /different Zenodo instance/],
     ['https://example.org/records/22705923', /not zenodo\.org or doi\.org/],
+    ['https://evilzenodo.org/records/1', /not zenodo\.org or doi\.org/],
     ['https://zenodo.org/communities/symbaproject', /does not name a record/],
     ['https://zenodo.org/search?q=climate', /does not name a record/],
     ['https://doi.org/not-a-doi', /not a well-formed DOI/],

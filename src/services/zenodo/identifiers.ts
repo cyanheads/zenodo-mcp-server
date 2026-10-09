@@ -145,7 +145,7 @@ function parseUrl(raw: string): RecordRef | ParseFailure {
   }
 
   if (!ZENODO_HOSTS.has(host)) {
-    const note = host.endsWith('zenodo.org')
+    const note = host.endsWith('.zenodo.org')
       ? `${host} is a different Zenodo instance; only zenodo.org records are served.`
       : `${host} is not zenodo.org or doi.org.`;
     return { kind: 'invalid', message: note };
