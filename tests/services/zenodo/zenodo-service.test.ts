@@ -230,6 +230,26 @@ describe('getRecord', () => {
     ]);
   });
 
+  it('keeps only files.order names the manifest holds as its own keys', async () => {
+    const raw = recordFixture();
+    raw.files = {
+      enabled: true,
+      count: 2,
+      order: ['constructor', 'toString', 'a.txt', '__proto__', 'hasOwnProperty'],
+      entries: {
+        'a.txt': { key: 'a.txt', size: 1 },
+        constructor: { key: 'constructor', size: 2 },
+      },
+    };
+    fm.route({ match: onPath('/records/22705923'), respond: () => jsonResponse(raw) });
+    const lookup = await service.getRecord('22705923', ctx());
+    if (lookup.status !== 'found') throw new Error('expected found');
+    expect(lookup.record.files.entries.map((e) => [e.key, e.size])).toEqual([
+      ['constructor', 2],
+      ['a.txt', 1],
+    ]);
+  });
+
   it('returns not_found on a 404 and restricted on a 403', async () => {
     fm.route(
       {

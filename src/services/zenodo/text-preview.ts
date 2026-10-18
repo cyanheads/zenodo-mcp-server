@@ -96,46 +96,46 @@ export function isZip(key: string, mimetype: string | undefined): boolean {
   return extensionOf(key) === 'zip' || (mimetype ?? '').toLowerCase() === 'application/zip';
 }
 
-const LANGUAGE_HINTS: Record<string, string> = {
-  md: 'markdown',
-  markdown: 'markdown',
-  json: 'json',
-  jsonl: 'json',
-  ndjson: 'json',
-  geojson: 'json',
-  ipynb: 'json',
-  yaml: 'yaml',
-  yml: 'yaml',
-  cff: 'yaml',
-  xml: 'xml',
-  html: 'html',
-  htm: 'html',
-  csv: 'csv',
-  tsv: 'tsv',
-  py: 'python',
-  r: 'r',
-  rmd: 'markdown',
-  jl: 'julia',
-  sh: 'bash',
-  sql: 'sql',
-  toml: 'toml',
-  ini: 'ini',
-  js: 'javascript',
-  ts: 'typescript',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  java: 'java',
-  go: 'go',
-  rs: 'rust',
-  tex: 'latex',
-  bib: 'bibtex',
-  rst: 'rst',
-};
+const LANGUAGE_HINTS: ReadonlyMap<string, string> = new Map([
+  ['md', 'markdown'],
+  ['markdown', 'markdown'],
+  ['json', 'json'],
+  ['jsonl', 'json'],
+  ['ndjson', 'json'],
+  ['geojson', 'json'],
+  ['ipynb', 'json'],
+  ['yaml', 'yaml'],
+  ['yml', 'yaml'],
+  ['cff', 'yaml'],
+  ['xml', 'xml'],
+  ['html', 'html'],
+  ['htm', 'html'],
+  ['csv', 'csv'],
+  ['tsv', 'tsv'],
+  ['py', 'python'],
+  ['r', 'r'],
+  ['rmd', 'markdown'],
+  ['jl', 'julia'],
+  ['sh', 'bash'],
+  ['sql', 'sql'],
+  ['toml', 'toml'],
+  ['ini', 'ini'],
+  ['js', 'javascript'],
+  ['ts', 'typescript'],
+  ['c', 'c'],
+  ['h', 'c'],
+  ['cpp', 'cpp'],
+  ['java', 'java'],
+  ['go', 'go'],
+  ['rs', 'rust'],
+  ['tex', 'latex'],
+  ['bib', 'bibtex'],
+  ['rst', 'rst'],
+]);
 
-/** Code-fence language hint for a file key; `''` when none applies. */
+/** Code-fence language hint for a file key; `''` for any extension the table does not list. */
 export function languageHint(key: string): string {
-  return LANGUAGE_HINTS[extensionOf(key)] ?? '';
+  return LANGUAGE_HINTS.get(extensionOf(key)) ?? '';
 }
 
 /** Result of cutting a byte window into previewable text. */

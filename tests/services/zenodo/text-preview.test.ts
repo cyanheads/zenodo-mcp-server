@@ -130,6 +130,9 @@ describe('languageHint', () => {
     ['table.csv', 'csv'],
     ['notes.txt', ''],
     ['README', ''],
+    ['notes.constructor', ''],
+    ['notes.__proto__', ''],
+    ['archive/Notes.CONSTRUCTOR', ''],
   ])('%s → %j', (key, hint) => {
     expect(languageHint(key)).toBe(hint);
   });

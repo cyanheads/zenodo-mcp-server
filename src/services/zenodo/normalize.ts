@@ -85,11 +85,14 @@ function normalizePerson(raw: RawCreator): Person {
   };
 }
 
-/** The complete manifest in upstream order (`files.order` when non-empty, else object order). */
+/**
+ * The complete manifest in upstream order (`files.order` when non-empty, else object
+ * order). An `order` name counts only when it is an own key of `entries`.
+ */
 function normalizeManifest(recid: string, files: RawFiles | undefined): FileEntry[] {
   const entries = files?.entries ?? {};
   const keys = files?.order?.length
-    ? files.order.filter((k) => k in entries)
+    ? files.order.filter((k) => Object.hasOwn(entries, k))
     : Object.keys(entries);
   return keys.map((mapKey) => {
     const e = entries[mapKey] ?? {};
