@@ -21,6 +21,7 @@ import {
 } from '@cyanheads/mcp-ts-core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { searchRecords } from '@/mcp-server/tools/definitions/search-records.tool.js';
+import { engineSyntaxError, querySyntaxError } from '@/services/zenodo/query-builder.js';
 import type { RawRecord } from '@/services/zenodo/types.js';
 import { disposeZenodoService, initZenodoService } from '@/services/zenodo/zenodo-service.js';
 import {
@@ -74,6 +75,9 @@ function sentParams(): [string, string][] {
 }
 
 const sentQ = () => sentParams().find(([k]) => k === 'q')?.[1];
+/** The `q` of every record-search request, in order. */
+const sentQs = () =>
+  searchCalls().map((c) => queryOf(c.request as Request).find(([k]) => k === 'q')?.[1]);
 
 function serveSearch(body: unknown | (() => unknown) = EMPTY_PAGE) {
   fm.route({
@@ -224,6 +228,62 @@ describe('zenodo_search_records — query, sort, and paging', () => {
         'Only the first 10,000 of 25,000 matches are reachable; add filters or a date range, or change sort.',
     });
   });
+
+  it('points the page before the straddling one at it with next_page', async () => {
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 1_166_021));
+    const { result } = await call({ resource_type: 'dataset', page: 3_333, size: 3 });
+    expect(result).toMatchObject({ reachable: 10_000, has_more: true, next_page: 3_334 });
+  });
+
+  it('sends the page straddling match 10,000 upstream, with the window notice and no next page', async () => {
+    // Zenodo serves this page short (one hit at size 3); shown counts the hits served, not the size.
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 1_166_021));
+    const { result, enrichment } = await call({ resource_type: 'dataset', page: 3_334, size: 3 });
+    expect(sentParams()).toContainEqual(['page', '3334']);
+    expect(sentParams()).toContainEqual(['size', '3']);
+    expect(result).toMatchObject({ page: 3_334, size: 3, reachable: 10_000, has_more: false });
+    expect(result).not.toHaveProperty('next_page');
+    expect(enrichment).toMatchObject({
+      truncated: false,
+      shown: 1,
+      cap: 3,
+      notice:
+        'Only the first 10,000 of 1,166,021 matches are reachable; add filters or a date range, or change sort.',
+    });
+  });
+
+  /** [size, the straddling last page]: sizes that do not divide 10,000. */
+  it.each([
+    [3, 3_334],
+    [7, 1_429],
+    [23, 435],
+  ])(
+    'size %i: the emitted next_page parses back and reaches the last page %i, and the page after it is rejected',
+    async (size, last) => {
+      serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 50_000));
+      const before = await call({ query: 'data', page: last - 1, size });
+      expect(before.result).toMatchObject({ has_more: true, next_page: last });
+
+      const next = searchRecords.input.parse({
+        query: 'data',
+        page: before.result.next_page,
+        size,
+      });
+      const { result } = await call(next);
+      expect(searchCalls().map((c) => queryOf(c.request).find(([k]) => k === 'page')?.[1])).toEqual(
+        [String(last - 1), String(last)],
+      );
+      expect(result).toMatchObject({ page: last, has_more: false });
+      expect(result).not.toHaveProperty('next_page');
+
+      const err = await failure({ query: 'data', page: last + 1, size });
+      expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+      expect(err.message).toBe(
+        `Page ${last + 1} at size ${size} starts past the first 10,000 matches; the last reachable page at size ${size} is ${last}.`,
+      );
+      expect(searchCalls()).toHaveLength(2);
+    },
+  );
 
   it('reports a page past the last page with the last page number', async () => {
     serveSearch(() => hitsBody([], 47));
@@ -496,9 +556,12 @@ describe('zenodo_search_records — filters reaching the request', () => {
 });
 
 describe('zenodo_search_records — pre-network rejections', () => {
-  it('result_window_exceeded when page × size passes 10,000', async () => {
+  it('result_window_exceeded when the page starts past match 10,000, naming the last page', async () => {
     const err = await failure({ query: 'climate', page: 401, size: 25 });
     expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      'Page 401 at size 25 starts past the first 10,000 matches; the last reachable page at size 25 is 400.',
+    );
     expect(fm.calls).toHaveLength(0);
   });
 
@@ -522,6 +585,9 @@ describe('zenodo_search_records — pre-network rejections', () => {
   it('query_syntax for an unpaired unescaped slash', async () => {
     const err = await failure({ query: 'climate 10.5281/zenodo.591564' });
     expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      'Zenodo cannot run the query: the regular expression starting "/zenodo.591564" has no closing / (Zenodo reads any unescaped / outside double quotes as a regular-expression delimiter).',
+    );
     expect(fm.calls).toHaveLength(0);
   });
 
@@ -559,7 +625,9 @@ describe('zenodo_search_records — pre-network rejections', () => {
     { resource_type: 'datasets' },
     { file_type: 'tar.gz' },
     { license: 'CC BY 4.0' },
-    { size: 26 },
+    { size: 0 },
+    { size: 10_001 },
+    { size: 2.5 },
   ])('rejects %j at the schema, before any upstream call', async (input) => {
     const result = await runToolContract(searchRecords, input);
     expect(result.isError).toBe(true);
@@ -573,6 +641,560 @@ describe('zenodo_search_records — pre-network rejections', () => {
     serveSearch();
     await call({ published_from: '2024-02-29' });
     expect(sentQ()).toBe('metadata.publication_date:[2024-02-29 TO *]');
+  });
+});
+
+describe('zenodo_search_records — queries Zenodo cannot parse', () => {
+  const FILTERS = { license: 'mit', resource_type: 'dataset' };
+  const FILTER_Q = 'metadata.rights.id:"mit" AND metadata.resource_type.props.type:"dataset"';
+  const DROPPED = 'With filters set, Zenodo would not apply them to this query.';
+  const plainText = (detail: string) =>
+    `Zenodo could not parse the query (${detail}), so it matched the query's words as plain text and ignored its operators, quotes, and field syntax.`;
+  const oneHit = () => hitsBody([fixture<RawRecord>('record-22705923.json')], 1);
+
+  it.each([
+    'climate AND AND model',
+    'climate AND OR model',
+    'climate (',
+    '(climate AND) model',
+    'metadata.title:',
+    'climate::model',
+    '[2020 TO',
+    'climate~~',
+    "'climate change'",
+    'climate >',
+    'climate ] model',
+  ])('query_syntax with filters, before any upstream call: %j', async (query) => {
+    const err = await failure({ query, ...FILTERS });
+    expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toMatch(/^Zenodo cannot parse the query/);
+    expect(err.message.endsWith(DROPPED)).toBe(true);
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      'climate AND AND model',
+      'Zenodo cannot parse the query: unexpected "AND" after "climate AND".',
+    ],
+    [
+      'climate (',
+      'Zenodo cannot parse the query as it would be sent ("climate ()"): unexpected ")" after "climate (".',
+    ],
+    [
+      'metadata.title:',
+      'Zenodo cannot parse the query: it ends after "metadata.title:" where a term must follow.',
+    ],
+    [
+      "'climate change'",
+      `Zenodo cannot parse the query: a term starts with a single quote at "'climate change'".`,
+    ],
+    ['climate ] model', 'Zenodo cannot parse the query: unexpected "]" after "climate".'],
+    [
+      `${'x '.repeat(30)}AND OR model`,
+      'Zenodo cannot parse the query: unexpected "OR" after "…x x x x x x x x x x x x x x x x x x AND".',
+    ],
+  ])('names the offending token for %j', async (query, message) => {
+    const err = await failure({ query, ...FILTERS });
+    expect(err.message).toBe(`${message} ${DROPPED}`);
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it('names a " left open inside a word before the token balancing would strand', async () => {
+    // Balanced, a" ) becomes a" )", whose ) would end the group it is composed in.
+    const err = await failure({ query: 'a" )', ...FILTERS });
+    expect(err.message).toBe(
+      'Zenodo cannot run the query: the double quote after "a" opens a phrase that never closes (Zenodo reads a " inside a word as the start of a phrase).',
+    );
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    { resource_type: 'dataset' },
+    { funder: '01cwqze88' },
+    { award: '101135562' },
+    { creator_orcid: '0000-0002-1825-0097' },
+    { file_type: 'csv' },
+    { license: 'mit' },
+    { access_status: 'open' },
+    { published_from: '2020' },
+    { published_to: '2021' },
+    { community: 'symbaproject', award: '101135562' },
+  ])('checks the query before resolving or searching when %j composes into q', async (filter) => {
+    const err = await failure({ query: 'climate AND AND model', ...filter });
+    expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['climate AND model', '(climate AND model)'],
+    ['climate && model', '(climate && model)'],
+    ['!climate', '(!climate)'],
+    ['climate^', '(climate^)'],
+    ["don't panic", "(don't panic)"],
+    ['R: a language', '(R: a language)'],
+    ['foo.bar:climate', '(foo.bar:climate)'],
+    ['climate "model', '(climate "model")'],
+    ['climate) OR (model', '(climate\\) OR (model))'],
+    ['AND climate', '(climate)'],
+    ['climate \\', '(climate \\\\)'],
+  ])('sends %j with filters as %s, without a notice', async (query, group) => {
+    serveSearch(oneHit);
+    const { enrichment } = await call({ query, ...FILTERS });
+    expect(sentQ()).toBe(`${group} AND ${FILTER_Q}`);
+    expect(enrichment.effectiveQuery).toBe(`${group} AND ${FILTER_Q}`);
+    expect(enrichment).not.toHaveProperty('notice');
+  });
+
+  it.each([
+    ['climate AND AND model', 'unexpected "AND" after "climate AND"'],
+    ["'climate change'", `a term starts with a single quote at "'climate change'"`],
+    ['metadata.title:', 'it ends after "metadata.title:" where a term must follow'],
+    ['[2020 TO', 'it ends after "[2020 TO" where a term must follow'],
+    ['climate (', 'it ends after "climate (" where a term must follow'],
+    ['climate \\', 'a backslash at the end escapes nothing (after "climate")'],
+    ['climate "model', 'the phrase starting ""model" has no closing double quote'],
+  ])('sends %j as written without filters, with the plain-text notice', async (query, detail) => {
+    serveSearch(oneHit);
+    const { enrichment } = await call({ query });
+    expect(sentQ()).toBe(query);
+    expect(enrichment).toMatchObject({ effectiveQuery: query, notice: plainText(detail) });
+  });
+
+  it('sends an unparseable query as written beside community and all_versions, with the notice', async () => {
+    serveJson('/communities/symbaproject', fixture('community-symbaproject.json'));
+    serveSearch(oneHit);
+    const { enrichment } = await call({
+      query: 'climate AND AND model',
+      community: 'symbaproject',
+      all_versions: true,
+    });
+    expect(sentParams()).toEqual([
+      ['q', 'climate AND AND model'],
+      ['communities', SYMBA_UUID],
+      ['all_versions', 'true'],
+      ['sort', 'bestmatch'],
+      ['page', '1'],
+      ['size', '10'],
+    ]);
+    expect(enrichment.notice).toBe(plainText('unexpected "AND" after "climate AND"'));
+  });
+
+  it('leads a zero-hit notice with the plain-text fragment and drops the AND hint', async () => {
+    serveSearch();
+    const { enrichment } = await call({ query: 'climate AND AND model', all_versions: true });
+    expect(enrichment.notice).toBe(
+      `${plainText('unexpected "AND" after "climate AND"')} No records matched.`,
+    );
+  });
+
+  it('carries the plain-text notice on both surfaces', async () => {
+    serveSearch(oneHit);
+    const result = await runToolContract(searchRecords, { query: "'climate change'" });
+    expect(result.isError).toBeFalsy();
+    const notice = plainText(`a term starts with a single quote at "'climate change'"`);
+    expect(result.structuredContent).toMatchObject({ total: 1, notice });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain(notice);
+  });
+
+  it('renders query_syntax as an error envelope carrying the message and recovery hint', async () => {
+    const result = await runToolContract(searchRecords, {
+      query: 'climate AND AND model',
+      ...FILTERS,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ValidationError,
+        data: { reason: 'query_syntax', recovery: { hint: recovery('query_syntax') } },
+      },
+    });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('unexpected "AND" after "climate AND"');
+    expect(text).toContain(recovery('query_syntax'));
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      'climate^1.2.3',
+      'the boost "^1.2.3" after "climate" is not one decimal number such as ^2 or ^0.5',
+    ],
+    [
+      'climate~1.2.3',
+      'the fuzziness "~1.2.3" after "climate" is not one decimal number such as ~1 or ~0.5',
+    ],
+    ['"x y"~0.5', 'the proximity "~0.5" after ""x y"" is not a whole number such as ~2'],
+    ['"x y"~1.0', 'the proximity "~1.0" after ""x y"" is not a whole number such as ~2'],
+  ])(
+    'query_syntax for %j with or without filters, naming the value, before any upstream call',
+    async (query, detail) => {
+      for (const filters of [{}, FILTERS, { community: 'symbaproject' }]) {
+        const err = await failure({ query, ...filters });
+        expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+        expect(err.message).toBe(`Zenodo cannot convert a number in the query: ${detail}.`);
+      }
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+
+  it('names a number in the query as it would be sent with filters', async () => {
+    const err = await failure({ query: 'climate^1.2.3 (', ...FILTERS });
+    expect(err.message).toBe(
+      'Zenodo cannot convert a number in the query as it would be sent ("climate^1.2.3 ()"): the boost "^1.2.3" after "climate" is not one decimal number such as ^2 or ^0.5.',
+    );
+  });
+
+  it.each([
+    'climate^2',
+    'climate^0.5',
+    'climate^.5',
+    'climate^1.',
+    'climate~0.5',
+    'climate~3',
+    'climate~1.',
+    'climate~',
+    '"x y"~2',
+    '"x y"~',
+  ])('sends the convertible %j, with filters and without', async (query) => {
+    serveSearch(oneHit);
+    const filtered = await call({ query, ...FILTERS });
+    const alone = await call({ query });
+    expect(sentQs()).toEqual([`(${query}) AND ${FILTER_Q}`, query]);
+    expect(filtered.enrichment).not.toHaveProperty('notice');
+    expect(alone.enrichment).not.toHaveProperty('notice');
+  });
+
+  it('sends an unconvertible number as plain text when an earlier syntax error stops the parser first', async () => {
+    serveSearch(oneHit);
+    const { enrichment } = await call({ query: 'AND AND climate^1.2.3' });
+    expect(sentQ()).toBe('AND AND climate^1.2.3');
+    expect(enrichment.notice).toBe(plainText('unexpected "AND" at the start'));
+  });
+
+  it('renders a conversion failure as an error envelope carrying the message and recovery hint', async () => {
+    const result = await runToolContract(searchRecords, { query: 'climate^1.2.3' });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ValidationError,
+        data: { reason: 'query_syntax', recovery: { hint: recovery('query_syntax') } },
+      },
+    });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('the boost "^1.2.3" after "climate" is not one decimal number');
+    expect(text).toContain(recovery('query_syntax'));
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each([{}, { license: 'mit' }])(
+    'query_syntax for a regex body that leaves a quoted string open, with %j',
+    async (filters) => {
+      const err = await failure({ query: '/a"/ b', ...filters });
+      expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+      expect(err.message).toBe(
+        'Zenodo cannot run the query: the regular expression "/a"/" opens a quoted string with " and never closes it.',
+      );
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+
+  it.each(['/[a"]/ b', '/a"b"/ c'])(
+    'sends %j, whose " belongs to its regex, with filters and without',
+    async (query) => {
+      serveSearch(oneHit);
+      await call({ query, ...FILTERS });
+      await call({ query });
+      expect(sentQs()).toEqual([`(${query}) AND ${FILTER_Q}`, query]);
+    },
+  );
+
+  const WORD_QUOTE = ' (Zenodo reads a " inside a word as the start of a phrase)';
+  it.each([
+    ['(a"b)', 'the double quote after "(a" opens a phrase that never closes'],
+    [
+      '(a"b) c"',
+      'the phrase ""b) c"" opened after "(a" takes in a parenthesis or bracket the query needs',
+    ],
+    ['a"b "c d"', 'the double quote after "a"b "c d" opens a phrase that never closes'],
+  ])(
+    'query_syntax for a " opened inside a word, with or without filters, before any upstream call: %j',
+    async (query, detail) => {
+      for (const filters of [{}, FILTERS, { community: 'symbaproject' }]) {
+        const err = await failure({ query, ...filters });
+        expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+        expect(err.message).toBe(`Zenodo cannot run the query: ${detail}${WORD_QUOTE}.`);
+      }
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    [
+      'climate a"b',
+      'the double quote after "climate a" opens a phrase that never closes',
+      'climate a"b"',
+    ],
+    ['a"', 'the double quote after "a" opens a phrase that never closes', 'a""'],
+    ['12" vinyl', 'the double quote after "12" opens a phrase that never closes', '12" vinyl"'],
+  ])(
+    'query_syntax for %j without filters; with them, sends it with the phrase balancing closes',
+    async (query, detail, balanced) => {
+      for (const filters of [{}, { community: 'symbaproject' }]) {
+        const err = await failure({ query, ...filters });
+        expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+        expect(err.message).toBe(`Zenodo cannot run the query: ${detail}${WORD_QUOTE}.`);
+      }
+      expect(fm.calls).toHaveLength(0);
+      serveSearch(oneHit);
+      const { enrichment } = await call({ query, ...FILTERS });
+      expect(sentQ()).toBe(`(${balanced}) AND ${FILTER_Q}`);
+      expect(enrichment.effectiveQuery).toBe(`(${balanced}) AND ${FILTER_Q}`);
+      expect(enrichment).not.toHaveProperty('notice');
+    },
+  );
+
+  const RANGE_ESCAPE =
+    ' (Zenodo ends a range bound at its first space, ] or }, even an escaped one, and cannot end one in a backslash)';
+  const NOT_READING =
+    ' (Zenodo reads an unescaped ! outside double quotes as NOT, inside a word too)';
+  it.each([
+    ['[a TO b\\]]', `the range bound "b\\" after "[a TO" ends in a backslash${RANGE_ESCAPE}`],
+    ['[a\\ b TO c]', `the range bound "a\\" after "[" ends in a backslash${RANGE_ESCAPE}`],
+    ['climate!', `the ! after "climate" is a NOT with nothing after it${NOT_READING}`],
+    ['(climate!) model', `the ! after "(climate" is a NOT with nothing after it${NOT_READING}`],
+  ])(
+    'query_syntax for %j with or without filters, before any upstream call',
+    async (query, detail) => {
+      for (const filters of [{}, FILTERS, { community: 'symbaproject' }]) {
+        const err = await failure({ query, ...filters });
+        expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+        expect(err.message).toBe(`Zenodo cannot run the query: ${detail}.`);
+      }
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+
+  it('names a problem only the balanced query has as it would be sent', async () => {
+    const err = await failure({ query: 'climate! OR', ...FILTERS });
+    expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      `Zenodo cannot run the query as it would be sent ("climate!"): the ! after "climate" is a NOT with nothing after it${NOT_READING}.`,
+    );
+    expect(fm.calls).toHaveLength(0);
+    // Without filters luqum cannot parse it, so Zenodo matches it as plain text.
+    serveSearch(oneHit);
+    const { enrichment } = await call({ query: 'climate! OR' });
+    expect(sentQ()).toBe('climate! OR');
+    expect(enrichment.notice).toBe(
+      plainText('it ends after "climate! OR" where a term must follow'),
+    );
+  });
+
+  it('renders an engine-reading failure as an error envelope carrying the message and recovery hint', async () => {
+    const result = await runToolContract(searchRecords, { query: 'climate!' });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ValidationError,
+        data: { reason: 'query_syntax', recovery: { hint: recovery('query_syntax') } },
+      },
+    });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('the ! after "climate" is a NOT with nothing after it');
+    expect(text).toContain(recovery('query_syntax'));
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each(['climate! model', '!climate model', 'climate\\!', '[a TO b\\\\]', '[a TO "b]"]'])(
+    'sends %j, whose ! has a term after it or whose bound unescapes, with filters and without',
+    async (query) => {
+      serveSearch(oneHit);
+      await call({ query, ...FILTERS });
+      await call({ query });
+      expect(sentQs()).toEqual([`(${query}) AND ${FILTER_Q}`, query]);
+    },
+  );
+
+  it('query_syntax for a regex opened inside a word that takes in a bracket', async () => {
+    const err = await failure({ query: '(a/b) c/' });
+    expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      'Zenodo cannot run the query: the regular expression "/b) c/" opened after "(a" takes in a parenthesis or bracket the query needs (Zenodo reads any unescaped / outside double quotes as a regular-expression delimiter).',
+    );
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each(['climate a"b"', 'a"b c"d', 'x"y"z', 'a\\"b', '(a"b) (c")'])(
+    'sends %j, whose word quotes Zenodo pairs, with filters and without',
+    async (query) => {
+      serveSearch(oneHit);
+      await call({ query, ...FILTERS });
+      await call({ query });
+      expect(sentQs()).toEqual([`(${query}) AND ${FILTER_Q}`, query]);
+    },
+  );
+
+  it.each(['[a"b TO c/d]', '[a"b TO c]', '[a TO b/c]', '{a/b TO c}'])(
+    'sends the range %j, whose bound holds a literal " or /, unchanged with filters and without',
+    async (query) => {
+      serveSearch(oneHit);
+      const filtered = await call({ query, ...FILTERS });
+      const alone = await call({ query });
+      expect(sentQs()).toEqual([`(${query}) AND ${FILTER_Q}`, query]);
+      expect(filtered.enrichment).not.toHaveProperty('notice');
+      expect(alone.enrichment).not.toHaveProperty('notice');
+    },
+  );
+
+  it('closes the phrase left open after a range whose bound holds a "', async () => {
+    serveSearch(oneHit);
+    await call({ query: '[a"b TO c] "d', ...FILTERS });
+    expect(sentQ()).toBe(`([a"b TO c] "d") AND ${FILTER_Q}`);
+  });
+
+  it.each([
+    ['climate model [CMIP6]', 'unexpected "]" after "climate model [CMIP6"'],
+    ['~50 samples', 'unexpected "~50" at the start'],
+    ['climate model:', 'it ends after "climate model:" where a term must follow'],
+  ])('query_syntax with filters for the plain-language %j', async (query, detail) => {
+    const err = await failure({ query, ...FILTERS });
+    expect(err.message).toBe(`Zenodo cannot parse the query: ${detail}. ${DROPPED}`);
+  });
+
+  it.each([
+    '"[CMIP6]"',
+    '\\[CMIP6\\]',
+    'climate model "[CMIP6]"',
+    '\\~50 samples',
+    'climate model\\:',
+    '10.5281\\/zenodo.1',
+  ])('sends the quoted or escaped %j with filters', async (query) => {
+    serveSearch(oneHit);
+    await call({ query, ...FILTERS });
+    expect(sentQ()).toBe(`(${query}) AND ${FILTER_Q}`);
+  });
+
+  it('cites only examples that behave as its recovery says', async () => {
+    const hint = recovery('query_syntax');
+    for (const plain of [
+      '"[CMIP6]"',
+      '\\[CMIP6\\]',
+      '10.5281\\/zenodo.1',
+      'climate\\!',
+      '12\\" vinyl',
+      '[a TO b]',
+      '[a TO "b]"]',
+    ]) {
+      expect(hint).toContain(plain);
+      expect(querySyntaxError(plain)).toBeUndefined();
+      expect(engineSyntaxError(plain)).toBeUndefined();
+    }
+    for (const value of ['^2', '~0.5', '"x y"~2']) {
+      expect(hint).toContain(value);
+      expect(querySyntaxError(`${value.startsWith('"') ? '' : 'climate'}${value}`)).toBeUndefined();
+    }
+    expect(hint).toContain('(climate AND)');
+    expect(querySyntaxError('(climate AND)')).toMatchObject({ problem: 'unexpected', token: ')' });
+    expect(hint).not.toContain('trailing');
+    // A trailing operator is dropped before the check, so it never causes the error.
+    serveSearch(oneHit);
+    await call({ query: 'climate OR', ...FILTERS });
+    expect(sentQ()).toBe(`(climate) AND ${FILTER_Q}`);
+  });
+
+  it('sends a term-start regex with no closing / as plain text without filters, and rejects it with them', async () => {
+    serveSearch(oneHit);
+    const { enrichment } = await call({ query: 'climate /model' });
+    expect(sentQ()).toBe('climate /model');
+    expect(enrichment.notice).toBe(
+      plainText('the regular expression starting "/model" has no closing /'),
+    );
+    const err = await failure({ query: 'climate /model', ...FILTERS });
+    expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toMatch(/^Zenodo cannot run the query: the regular expression starting/);
+    expect(searchCalls()).toHaveLength(1);
+  });
+});
+
+describe('zenodo_search_records — the 25-per-call size cap', () => {
+  const sentSizes = () =>
+    searchCalls().map((c) => queryOf(c.request).find(([k]) => k === 'size')?.[1]);
+
+  it('serves size 26 at 25: the request, output, cap, and next_page use 25, and the notice names both', async () => {
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 30));
+    const { result, enrichment } = await call({ query: 'data', size: 26 });
+    expect(sentSizes()).toEqual(['25']);
+    expect(result).toMatchObject({ page: 1, size: 25, has_more: true, next_page: 2 });
+    expect(enrichment).toMatchObject({
+      truncated: true,
+      cap: 25,
+      notice: 'Showing 1 of 30 (size 26 is capped at 25 per call); call again with page 2.',
+    });
+
+    const next = searchRecords.input.parse({ query: 'data', size: 26, page: result.next_page });
+    const second = await call(next);
+    expect(sentSizes()).toEqual(['25', '25']);
+    expect(second.result).toMatchObject({ page: 2, size: 25, has_more: false });
+    expect(second.enrichment).not.toHaveProperty('notice');
+  });
+
+  it('accepts the 10,000 ceiling and serves it at 25', async () => {
+    serveSearch(() => hitsBody([], 0));
+    const { result, enrichment } = await call({ query: 'zzqx', size: 10_000 });
+    expect(sentSizes()).toEqual(['25']);
+    expect(result.size).toBe(25);
+    expect(enrichment.cap).toBe(25);
+  });
+
+  it('names no cap when the cap withheld nothing', async () => {
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 1));
+    const { result, enrichment } = await call({ query: 'scikit-learn', size: 100 });
+    expect(result).toMatchObject({ size: 25, has_more: false });
+    expect(enrichment).toMatchObject({ truncated: false, shown: 1, cap: 25 });
+    expect(enrichment).not.toHaveProperty('notice');
+  });
+
+  it('serves page 400 at size 100 as the last window page at 25', async () => {
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 25_000));
+    const { result, enrichment } = await call({ query: 'data', page: 400, size: 100 });
+    expect(sentParams()).toContainEqual(['page', '400']);
+    expect(sentSizes()).toEqual(['25']);
+    expect(result).toMatchObject({ page: 400, size: 25, reachable: 10_000, has_more: false });
+    expect(enrichment).toMatchObject({
+      cap: 25,
+      notice:
+        'Only the first 10,000 of 25,000 matches are reachable; add filters or a date range, or change sort.',
+    });
+  });
+
+  it('rejects page 401 at size 100 against the window at 25, naming the cap', async () => {
+    const err = await failure({ query: 'data', page: 401, size: 100 });
+    expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      'Page 401 at size 25 starts past the first 10,000 matches (size 100 is capped at 25 per call); the last reachable page at size 25 is 400.',
+    );
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it('carries the cap notice on both surfaces', async () => {
+    serveSearch(climatePage);
+    const result = await runToolContract(searchRecords, { query: 'climate', size: 50 });
+    expect(result.isError).toBeFalsy();
+    const notice =
+      'Only the first 10,000 of 110,814 matches are reachable; add filters or a date range, or change sort. Showing 2 of 10,000 (size 50 is capped at 25 per call); call again with page 2.';
+    expect(result.structuredContent).toMatchObject({ size: 25, cap: 25, notice });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain('**Page:** 1 | **Size:** 25 | **Has more:** true | **Next page:** 2');
+    expect(text).toContain(notice);
+  });
+
+  it('advertises the 10,000 ceiling on size', () => {
+    const schema = z.toJSONSchema(searchRecords.input) as {
+      properties: Record<string, { maximum?: number }>;
+    };
+    expect(schema.properties.size?.maximum).toBe(10_000);
   });
 });
 

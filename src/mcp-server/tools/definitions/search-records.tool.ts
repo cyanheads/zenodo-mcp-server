@@ -19,19 +19,130 @@ import {
 } from '@/services/zenodo/identifiers.js';
 import {
   ACCESS_STATUSES,
+  engineSyntaxError,
   expandPartialDate,
-  hasUnpairedSlash,
+  isConversionError,
   isValidPartialDate,
+  type QuerySyntaxError,
+  queryAsSent,
+  querySyntaxError,
   SEARCH_SORTS,
   type SearchFilters,
 } from '@/services/zenodo/query-builder.js';
 import { RESOURCE_TYPE_IDS, resolveResourceTypeId } from '@/services/zenodo/resource-types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import {
+  applyCap,
+  hasMorePages,
+  PAGE_SIZE_CAP,
+  RESULT_WINDOW,
+  reachableHits,
+  windowRejection,
+} from '../paging.js';
 import { inline } from '../render.js';
 import { blankToUndefined, enumPreprocess, toOptionalArray } from '../schema-helpers.js';
 
-const RESULT_WINDOW = 10_000;
 const PARTIAL_DATE_PATTERN = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/;
+
+/** Inputs that compose into `q`; `community` and `all_versions` ride their own params. */
+const Q_FILTERS = [
+  'resource_type',
+  'funder',
+  'award',
+  'creator_orcid',
+  'file_type',
+  'license',
+  'access_status',
+  'published_from',
+  'published_to',
+] as const;
+
+/** `s` cut to `max` characters, marking the cut end with `…`. */
+const clip = (s: string, max: number, from: 'start' | 'end'): string => {
+  if (s.length <= max) return s;
+  return from === 'end' ? `…${s.slice(-max)}` : `${s.slice(0, max)}…`;
+};
+
+/** Where and why `query` fails to parse, quoting the query around the spot. */
+function describeSyntaxError(query: string, { index, problem, token }: QuerySyntaxError): string {
+  const before = inline(clip(query.slice(0, index), 40, 'end')).trimEnd();
+  const from = inline(clip(query.slice(index), 40, 'start'));
+  const value = inline(clip(token, 40, 'start'));
+  switch (problem) {
+    case 'unexpected':
+      return `unexpected "${value}" ${before ? `after "${before}"` : 'at the start'}`;
+    case 'end':
+      return `it ends after "${before}" where a term must follow`;
+    case 'quote':
+      return `a term starts with a single quote at "${from}"`;
+    case 'escape':
+      return `a backslash ${index + 1 < query.length ? 'before a line break' : 'at the end'} escapes nothing (after "${before}")`;
+    case 'phrase':
+      return `the phrase starting "${from}" has no closing double quote`;
+    case 'regex':
+      return `the regular expression starting "${from}" has no closing /`;
+    case 'regex_quote':
+      return `the regular expression "${value}" opens a quoted string with " and never closes it`;
+    case 'word_quote':
+      return `the double quote after "${before}" opens a phrase that never closes`;
+    case 'word_span':
+      return `the ${token.startsWith('/') ? 'regular expression' : 'phrase'} "${value}" opened after "${before}" takes in a parenthesis or bracket the query needs`;
+    case 'range_escape':
+      return `the range bound "${value}" after "${before}" ends in a backslash`;
+    case 'dangling_not':
+      return `the ! after "${before}" is a NOT with nothing after it`;
+    case 'boost':
+      return `the boost "${value}" after "${before}" is not one decimal number such as ^2 or ^0.5`;
+    case 'fuzzy':
+      return `the fuzziness "${value}" after "${before}" is not one decimal number such as ~1 or ~0.5`;
+    case 'proximity':
+      return `the proximity "${value}" after "${before}" is not a whole number such as ~2`;
+  }
+}
+
+/** How Zenodo's search engine reads the character an {@link engineSyntaxError} problem turns on. */
+function engineReading({ problem, token }: QuerySyntaxError): string {
+  if (problem === 'regex' || (problem === 'word_span' && token.startsWith('/'))) {
+    return ' (Zenodo reads any unescaped / outside double quotes as a regular-expression delimiter)';
+  }
+  switch (problem) {
+    case 'regex_quote':
+      return '';
+    case 'range_escape':
+      return ' (Zenodo ends a range bound at its first space, ] or }, even an escaped one, and cannot end one in a backslash)';
+    case 'dangling_not':
+      return ' (Zenodo reads an unescaped ! outside double quotes as NOT, inside a word too)';
+    default:
+      return ' (Zenodo reads a " inside a word as the start of a phrase)';
+  }
+}
+
+/** ` as it would be sent ("…")` when the checked query differs from the caller's. */
+const asSentNote = (checked: string, query: string | undefined): string =>
+  checked === query ? '' : ` as it would be sent ("${inline(clip(checked, 200, 'start'))}")`;
+
+/**
+ * The search-engine problem the query fails on, with the query its offsets index. It
+ * is read as written first, so the message names the cause before balancing could
+ * close it. Without filters, a query luqum cannot parse is matched as plain text and
+ * the engine never reads it. With filters, Zenodo runs the balanced query, so a
+ * problem balancing repairs (a `"` left open inside a word) fails only when that query
+ * still fails; a `/` left open fails as written, since balancing would turn the rest
+ * of the query into a regular expression.
+ */
+function engineFailure(
+  query: string,
+  sent: string,
+  filtered: boolean,
+  syntaxError: QuerySyntaxError | undefined,
+): { error: QuerySyntaxError; query: string } | undefined {
+  const written = query ? engineSyntaxError(query) : undefined;
+  if (!filtered) return written && !syntaxError ? { error: written, query } : undefined;
+  if (written && (written.problem === 'regex' || syntaxError)) return { error: written, query };
+  const balanced = syntaxError ? undefined : engineSyntaxError(sent);
+  if (!balanced) return undefined;
+  return written ? { error: written, query } : { error: balanced, query: sent };
+}
 
 /**
  * Resource type preprocess: a lone string or array, each value resolved to its id
@@ -204,7 +315,7 @@ export const searchRecords = tool('zenodo_search_records', {
     query: z
       .preprocess(blankToUndefined, z.string().max(1000).optional())
       .describe(
-        'Keyword query. Terms are OR-ed unless joined with AND; "quoted phrases" match exactly; field syntax such as metadata.title:"…" or doi:"10.5281/zenodo.N" works. Escape a literal / as \\/. A bare DOI or record URL is rejected; open it with zenodo_get_record instead. Omit to browse with filters only.',
+        'Keyword query. Terms are OR-ed unless joined with AND; "quoted phrases" (double quotes) match exactly; field syntax such as metadata.title:"…" or doi:"10.5281/zenodo.N" works. Escape a literal / as \\/. A bare DOI or record URL is rejected; open it with zenodo_get_record instead. With any filter other than community and all_versions, a query that is not valid search syntax (AND AND, a field: with no value, an unclosed [a TO b]) is rejected; without one, Zenodo matches it as plain text. Omit to browse with filters only.',
       ),
     resource_type: resourceTypeInput.describe(
       'Resource type ids, OR-ed (a single string is accepted): dataset, software, publication, publication-article, image-photo, … Any case; a subtype may also be written in the <type>::<id> form zenodo_lookup_vocabulary shows as its search value (publication::publication-article). A top-level type includes its subtypes. Look ids up with zenodo_lookup_vocabulary (vocabulary: resource_types).',
@@ -288,14 +399,22 @@ export const searchRecords = tool('zenodo_search_records', {
       .int()
       .min(1)
       .default(1)
-      .describe('Result page, starting at 1. page × size may not exceed 10,000.'),
-    size: z.number().int().min(1).max(25).default(10).describe('Results per page (1–25).'),
+      .describe(
+        'Result page, starting at 1. Only the first 10,000 matches are reachable, so the last reachable page is 10,000 ÷ size rounded up (400 at size 25).',
+      ),
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .default(10)
+      .describe('Results per page, at most 25 per call; larger values return 25.'),
   }),
   output: z.object({
     total: z.number().describe('Exact number of matching records.'),
     reachable: z.number().describe('Matches reachable by paging: min(total, 10,000).'),
     page: z.number().describe('Page returned.'),
-    size: z.number().describe('Page size applied.'),
+    size: z.number().describe('Page size applied: size, or 25 when size asked for more.'),
     has_more: z.boolean().describe('True when another reachable page follows.'),
     next_page: z.number().optional().describe('The next page number, when has_more.'),
     hits: z.array(HitSchema).describe('Matching deposits on this page.'),
@@ -341,7 +460,7 @@ export const searchRecords = tool('zenodo_search_records', {
   enrichment: {
     truncated: z.boolean().describe('True when more reachable matches follow this page.'),
     shown: z.number().describe('Hits returned on this page.'),
-    cap: z.number().describe('Page size applied.'),
+    cap: z.number().describe('Page size applied (at most 25).'),
     totalCount: z.number().describe('Exact number of matching records.'),
     effectiveQuery: z.string().optional().describe('The exact q sent to Zenodo.'),
     appliedSort: z.enum(SEARCH_SORTS).describe('The sort order applied.'),
@@ -349,7 +468,9 @@ export const searchRecords = tool('zenodo_search_records', {
     notice: z
       .string()
       .optional()
-      .describe('Guidance on empty results, the 10,000-result window, or further pages.'),
+      .describe(
+        'Guidance on a query Zenodo matched as plain text, empty results, the 10,000-result window, the 25-per-call size cap, or further pages.',
+      ),
   },
   errors: [
     {
@@ -361,9 +482,9 @@ export const searchRecords = tool('zenodo_search_records', {
     {
       reason: 'query_syntax',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'The query has an unpaired unescaped / outside quotes',
+      when: 'The query holds something Zenodo cannot run: a regular expression with no closing / (an unescaped / outside double quotes) or with a " inside /…/ left open; a " inside a word whose phrase never closes (with a filter other than community and all_versions set, only when the query still fails once that phrase is closed at its end) or closes past a bracket the query needs; a range bound ending in a backslash, as one holding an escaped space, ] or } does; an unescaped ! with nothing after it; or a boost, fuzziness, or proximity value it cannot convert. Or a filter other than community and all_versions is set and the query is not valid search syntax, which Zenodo would match as plain text with every filter dropped',
       recovery:
-        'Escape the slash as \\/ or wrap that term in double quotes, then call zenodo_search_records again.',
+        'Fix the syntax the message names, then call zenodo_search_records again: double-quote or backslash-escape any / [ ] { } ~ ^ : or ! meant as plain text ("[CMIP6]", \\[CMIP6\\], 10.5281\\/zenodo.1, climate\\!) and any " inside a regular expression or a word (12\\" vinyl), write phrases in double quotes rather than single, drop a doubled or dangling operator (AND AND, or one with nothing after it inside parentheses, as in (climate AND)), give a field: prefix a value, close a range as [a TO b] and double-quote a bound that holds a space, ] or } ([a TO "b]"]), and give a boost or fuzziness one decimal number and a phrase proximity a whole number (^2, ~0.5, "x y"~2).',
     },
     {
       reason: 'query_failed',
@@ -407,7 +528,7 @@ export const searchRecords = tool('zenodo_search_records', {
     {
       reason: 'result_window_exceeded',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'page × size exceeds 10,000',
+      when: 'The page starts past the first 10,000 matches: (page − 1) × size is 10,000 or more, counting a size above 25 as 25',
       recovery:
         'Zenodo serves only the first 10,000 matches; add filters or a published_from/published_to range to zenodo_search_records instead of paging deeper.',
     },
@@ -424,31 +545,42 @@ export const searchRecords = tool('zenodo_search_records', {
 
   async handler(input, ctx) {
     const sort = input.sort ?? (input.query ? 'bestmatch' : 'newest');
+    const { applied: size, capNote } = applyCap('size', input.size, PAGE_SIZE_CAP);
     ctx.enrich({
       truncated: false,
       shown: 0,
-      cap: input.size,
+      cap: size,
       totalCount: 0,
       appliedSort: sort,
       allVersions: input.all_versions,
     });
 
-    if (input.page * input.size > RESULT_WINDOW) {
-      throw ctx.fail(
-        'result_window_exceeded',
-        `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} matches.`,
-      );
-    }
+    const pastWindow = windowRejection(input.page, size, 'matches', capNote);
+    if (pastWindow) throw ctx.fail('result_window_exceeded', pastWindow);
     if (input.query && isWholeIdentifier(input.query)) {
       throw ctx.fail(
         'query_is_identifier',
         `The query "${inline(input.query)}" is a record identifier, not search terms.`,
       );
     }
-    if (input.query && hasUnpairedSlash(input.query)) {
+    const filtered = Q_FILTERS.some((name) => input[name] !== undefined);
+    const sentQuery = queryAsSent(input.query, filtered);
+    const syntaxError = sentQuery ? querySyntaxError(sentQuery) : undefined;
+    const engine = engineFailure(input.query ?? '', sentQuery, filtered, syntaxError);
+    if (engine) {
       throw ctx.fail(
         'query_syntax',
-        'The query has an unpaired / outside quotes, which Zenodo parses as an unterminated regular expression.',
+        `Zenodo cannot run the query${asSentNote(engine.query, input.query)}: ${describeSyntaxError(engine.query, engine.error)}${engineReading(engine.error)}.`,
+      );
+    }
+    if (syntaxError && (filtered || isConversionError(syntaxError))) {
+      const asSent = asSentNote(sentQuery, input.query);
+      const detail = describeSyntaxError(sentQuery, syntaxError);
+      throw ctx.fail(
+        'query_syntax',
+        isConversionError(syntaxError)
+          ? `Zenodo cannot convert a number in the query${asSent}: ${detail}.`
+          : `Zenodo cannot parse the query${asSent}: ${detail}. With filters set, Zenodo would not apply them to this query.`,
       );
     }
 
@@ -496,7 +628,7 @@ export const searchRecords = tool('zenodo_search_records', {
     const filters: SearchFilters = {
       allVersions: input.all_versions,
       page: input.page,
-      size: input.size,
+      size,
       sort,
       ...(input.query ? { query: input.query } : {}),
       ...(input.resource_type ? { resourceTypes: input.resource_type } : {}),
@@ -513,13 +645,18 @@ export const searchRecords = tool('zenodo_search_records', {
     const result = await service.searchRecords(filters, ctx);
 
     const total = result.total;
-    const reachable = Math.min(total, RESULT_WINDOW);
-    const hasMore = input.page * input.size < reachable;
+    const reachable = reachableHits(total);
+    const hasMore = hasMorePages(input.page, size, total);
     ctx.enrich({ shown: result.hits.length });
     ctx.enrich.total(total);
     if (result.q) ctx.enrich.echo(result.q);
 
     const notice: string[] = [];
+    if (syntaxError) {
+      notice.push(
+        `Zenodo could not parse the query (${describeSyntaxError(sentQuery, syntaxError)}), so it matched the query's words as plain text and ignored its operators, quotes, and field syntax.`,
+      );
+    }
     if (total === 0) {
       notice.push('No records matched.');
       const narrowing = (
@@ -558,7 +695,7 @@ export const searchRecords = tool('zenodo_search_records', {
           'Only the latest version of each deposit is searched; set all_versions to true to include superseded versions.',
         );
       }
-      if (input.query && /\bAND\b|"/.test(input.query)) {
+      if (input.query && !syntaxError && /\bAND\b|"/.test(input.query)) {
         notice.push(
           'Terms joined by AND must all match and quoted phrases must match exactly; loosen the query.',
         );
@@ -567,7 +704,7 @@ export const searchRecords = tool('zenodo_search_records', {
         notice.push('Widen or drop published_from/published_to.');
       }
     } else if (result.hits.length === 0) {
-      const last = Math.max(1, Math.ceil(reachable / input.size));
+      const last = Math.max(1, Math.ceil(reachable / size));
       notice.push(
         `Page ${input.page} is past the last page (${last}); call again with page ${last} or lower.`,
       );
@@ -579,13 +716,9 @@ export const searchRecords = tool('zenodo_search_records', {
     }
     if (hasMore) {
       notice.push(
-        `Showing ${result.hits.length} of ${reachable.toLocaleString('en-US')}; call again with page ${input.page + 1}.`,
+        `Showing ${result.hits.length} of ${reachable.toLocaleString('en-US')}${capNote ? ` (${capNote})` : ''}; call again with page ${input.page + 1}.`,
       );
-      ctx.enrich.truncated({
-        shown: result.hits.length,
-        cap: input.size,
-        guidance: notice.join(' '),
-      });
+      ctx.enrich.truncated({ shown: result.hits.length, cap: size, guidance: notice.join(' ') });
     } else if (notice.length) {
       ctx.enrich.notice(notice.join(' '));
     }
@@ -594,7 +727,7 @@ export const searchRecords = tool('zenodo_search_records', {
       total,
       reachable,
       page: input.page,
-      size: input.size,
+      size,
       has_more: hasMore,
       ...(hasMore ? { next_page: input.page + 1 } : {}),
       hits: result.hits,
