@@ -1,6 +1,6 @@
 # zenodo-mcp-server - Directory Structure
 
-Generated on: 2026-10-09 07:39:56
+Generated on: 2026-10-17 23:37:53
 
 ```text
 zenodo-mcp-server/
@@ -146,6 +146,7 @@ zenodo-mcp-server/
 │   │       │   ├── lookup-vocabulary.tool.ts
 │   │       │   ├── read-file.tool.ts
 │   │       │   └── search-records.tool.ts
+│   │       ├── paging.ts
 │   │       ├── record-miss.ts
 │   │       ├── render.ts
 │   │       └── schema-helpers.ts
@@ -172,6 +173,7 @@ zenodo-mcp-server/
 │   │       ├── community-symbaproject.json
 │   │       ├── container-7614815-monthly_shapes_0_20.json
 │   │       ├── content-22917909-altersgruppen-0-299.csv
+│   │       ├── descriptions-8696-12666132-6515070.json
 │   │       ├── error-404-funder.json
 │   │       ├── error-404-pid.json
 │   │       ├── funder-01cwqze88.json
@@ -184,6 +186,8 @@ zenodo-mcp-server/
 │   │       ├── record-22837418-embargoed.json
 │   │       ├── record-22917909-csv.json
 │   │       ├── record-22931068-restricted.json
+│   │       ├── record-3409968-86-creators.json
+│   │       ├── record-5904106-long-notes.json
 │   │       ├── record-7126368-metadata-only.json
 │   │       ├── search-climate.json
 │   │       ├── search-doi-10.3897-ap.e134190.json
@@ -204,6 +208,7 @@ zenodo-mcp-server/
 │   │       │   ├── lookup-vocabulary.tool.test.ts
 │   │       │   ├── read-file.tool.test.ts
 │   │       │   └── search-records.tool.test.ts
+│   │       ├── paging.test.ts
 │   │       ├── render.test.ts
 │   │       └── schema-helpers.test.ts
 │   ├── services/
