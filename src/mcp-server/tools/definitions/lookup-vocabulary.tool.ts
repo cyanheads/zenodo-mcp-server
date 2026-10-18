@@ -11,12 +11,19 @@ import { parseFunderRef } from '@/services/zenodo/identifiers.js';
 import { filterResourceTypes } from '@/services/zenodo/resource-types.js';
 import type { VocabularyPage } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import {
+  applyCap,
+  hasMorePages,
+  PAGE_SIZE_CAP,
+  RESULT_WINDOW,
+  reachableHits,
+  windowRejection,
+} from '../paging.js';
 import { hasLineBreak, inline, quoteBlock } from '../render.js';
 import { blankToUndefined, enumPreprocess } from '../schema-helpers.js';
 
 const VOCABULARIES = ['communities', 'funders', 'awards', 'licenses', 'resource_types'] as const;
 type Vocabulary = (typeof VOCABULARIES)[number];
-const RESULT_WINDOW = 10_000;
 
 /** What to try after a query matched nothing, per vocabulary. */
 const ZERO_HIT_ADVICE: Record<Vocabulary, string> = {
@@ -185,28 +192,44 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
       .describe(
         'awards only: scope grants to one funder, given as a ROR id (00k4n6c32), a ROR URL, or a Crossref Funder DOI (10.13039/100000002). Resolve a funder name to its ROR id with vocabulary funders first.',
       ),
-    page: z.number().int().min(1).default(1).describe('Result page, starting at 1.'),
-    size: z.number().int().min(1).max(25).default(10).describe('Entries per page (1–25).'),
+    page: z
+      .number()
+      .int()
+      .min(1)
+      .default(1)
+      .describe(
+        'Result page, starting at 1. Only the first 10,000 entries of a list are reachable, so the last reachable page is 10,000 ÷ size rounded up (400 at size 25).',
+      ),
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .default(10)
+      .describe('Entries per page, at most 25 per call; larger values return 25.'),
   }),
   output: z.object({
     vocabulary: z.enum(VOCABULARIES).describe('The vocabulary searched.'),
     query: z.string().optional().describe('The query as applied; absent when browsing.'),
     total: z.number().describe('Total entries matching the query.'),
+    reachable: z.number().describe('Entries reachable by paging: min(total, 10,000).'),
     page: z.number().describe('Page returned.'),
-    size: z.number().describe('Page size applied.'),
-    has_more: z.boolean().describe('True when more pages follow this one.'),
+    size: z.number().describe('Page size applied: size, or 25 when size asked for more.'),
+    has_more: z.boolean().describe('True when another page of reachable entries follows.'),
     next_page: z.number().optional().describe('The next page number, when has_more.'),
     entries: z.array(EntrySchema).describe('Matching entries for this page.'),
   }),
   enrichment: {
-    truncated: z.boolean().describe('True when more entries exist beyond this page.'),
+    truncated: z.boolean().describe('True when more reachable entries follow this page.'),
     shown: z.number().describe('Entries returned on this page.'),
-    cap: z.number().describe('Page size applied.'),
+    cap: z.number().describe('Page size applied (at most 25).'),
     totalCount: z.number().describe('Total entries matching the query.'),
     notice: z
       .string()
       .optional()
-      .describe('Guidance on empty results, ambiguous funders, or further pages.'),
+      .describe(
+        'Guidance on empty results, ambiguous funders, the 10,000-entry window, the 25-per-call size cap, or further pages.',
+      ),
   },
   errors: [
     {
@@ -226,7 +249,7 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
     {
       reason: 'result_window_exceeded',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'page × size exceeds 10,000',
+      when: 'The page starts past the first 10,000 entries: (page − 1) × size is 10,000 or more, counting a size above 25 as 25',
       recovery:
         'Narrow the query and call zenodo_lookup_vocabulary again instead of paging past 10,000 entries.',
     },
@@ -242,7 +265,8 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
   ],
 
   async handler(input, ctx) {
-    ctx.enrich({ truncated: false, shown: 0, cap: input.size, totalCount: 0 });
+    const { applied: size, capNote } = applyCap('size', input.size, PAGE_SIZE_CAP);
+    ctx.enrich({ truncated: false, shown: 0, cap: size, totalCount: 0 });
 
     if (input.funder && input.vocabulary !== 'awards') {
       throw ctx.fail(
@@ -250,19 +274,15 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
         `funder applies only to vocabulary awards, not ${input.vocabulary}.`,
       );
     }
-    if (input.page * input.size > RESULT_WINDOW) {
-      throw ctx.fail(
-        'result_window_exceeded',
-        `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} entries.`,
-      );
-    }
+    const pastWindow = windowRejection(input.page, size, 'entries', capNote);
+    if (pastWindow) throw ctx.fail('result_window_exceeded', pastWindow);
 
     let total: number;
     let entries: Entry[];
     if (input.vocabulary === 'resource_types') {
       const matched = filterResourceTypes(input.query);
       total = matched.length;
-      entries = matched.slice((input.page - 1) * input.size, input.page * input.size).map((t) => ({
+      entries = matched.slice((input.page - 1) * size, input.page * size).map((t) => ({
         filter_param: 'resource_type',
         filter_value: t.id,
         label: t.label,
@@ -285,15 +305,15 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
       }
       const page = await service.searchVocabulary(
         input.vocabulary,
-        { query: input.query, funderRor, page: input.page, size: input.size },
+        { query: input.query, funderRor, page: input.page, size },
         ctx,
       );
       total = page.total;
       entries = toEntries(page);
     }
 
-    const reachable = Math.min(total, RESULT_WINDOW);
-    const hasMore = input.page * input.size < reachable;
+    const reachable = reachableHits(total);
+    const hasMore = hasMorePages(input.page, size, total);
     ctx.enrich({ shown: entries.length });
     ctx.enrich.total(total);
 
@@ -305,7 +325,7 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
           : `No ${input.vocabulary} entries were returned.`,
       );
     } else if (entries.length === 0) {
-      const last = Math.max(1, Math.ceil(reachable / input.size));
+      const last = Math.max(1, Math.ceil(reachable / size));
       notice.push(
         `Page ${input.page} is past the last page (${last}); call again with page ${last} or lower.`,
       );
@@ -313,9 +333,16 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
     if (input.vocabulary === 'funders' && entries.length > 1) {
       notice.push('Several funders share names across countries; pick by country and ROR id.');
     }
+    if (total > RESULT_WINDOW) {
+      notice.push(
+        `Only the first 10,000 of ${total.toLocaleString('en-US')} ${input.vocabulary} are reachable; narrow the list with query${input.vocabulary === 'awards' ? ' or funder' : ''}.`,
+      );
+    }
     if (hasMore) {
-      notice.push(`Showing ${entries.length} of ${total}; call again with page ${input.page + 1}.`);
-      ctx.enrich.truncated({ shown: entries.length, cap: input.size, guidance: notice.join(' ') });
+      notice.push(
+        `Showing ${entries.length} of ${reachable.toLocaleString('en-US')}${capNote ? ` (${capNote})` : ''}; call again with page ${input.page + 1}.`,
+      );
+      ctx.enrich.truncated({ shown: entries.length, cap: size, guidance: notice.join(' ') });
     } else if (notice.length) {
       ctx.enrich.notice(notice.join(' '));
     }
@@ -324,8 +351,9 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
       vocabulary: input.vocabulary,
       ...(input.query ? { query: input.query } : {}),
       total,
+      reachable,
       page: input.page,
-      size: input.size,
+      size,
       has_more: hasMore,
       ...(hasMore ? { next_page: input.page + 1 } : {}),
       entries,
@@ -335,7 +363,7 @@ export const lookupVocabulary = tool('zenodo_lookup_vocabulary', {
   format: (result) => {
     const lines = [
       `## Zenodo ${result.vocabulary}${result.query ? ` matching "${inline(result.query)}"` : ''}`,
-      `**Total:** ${result.total} | **Page:** ${result.page} | **Size:** ${result.size} | **Has more:** ${result.has_more}${result.next_page !== undefined ? ` | **Next page:** ${result.next_page}` : ''}`,
+      `**Total:** ${result.total} (${result.reachable} reachable) | **Page:** ${result.page} | **Size:** ${result.size} | **Has more:** ${result.has_more}${result.next_page !== undefined ? ` | **Next page:** ${result.next_page}` : ''}`,
     ];
     for (const e of result.entries) {
       lines.push(

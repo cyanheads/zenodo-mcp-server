@@ -69,6 +69,10 @@ const BOM_CSV = concat(
   encode('id,value\r\n1,alpha\r\n2,beta\r\n'),
 );
 const BLOB = concat(encode('PK'), Uint8Array.of(0x03, 0x04, 0x00, 0x00), encode('rest'));
+/** 1,500 lines of 99 `z` + LF: 150,000 bytes, 100 per line, past the 65,536-byte read cap twice. */
+const BIG = encode(`${'z'.repeat(99)}\n`.repeat(1_500));
+/** 3,000 lines of 23 bytes: a 69,000-byte member, larger than the read cap. */
+const BIG_MEMBER = encode('Line of the changelog.\n'.repeat(3_000));
 const LICENSE_TEXT =
   '                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n\n Copyright (C) 2007 Free Software Foundation, Inc. — “free as in freedom”\n';
 /** Latin-1 bytes with no NUL: not valid UTF-8 (0xE9 followed by ASCII). */
@@ -244,7 +248,7 @@ describe('zenodo_read_file — top-level text files', () => {
       files_access: 'public',
     });
     expect(enrichment).toEqual({
-      notice: 'Showing bytes 0–239 of 83958; call zenodo_read_file again with offset_bytes 240.',
+      notice: 'Showing bytes 0–239 of 83,958; call zenodo_read_file again with offset_bytes 240.',
     });
   });
 
@@ -578,7 +582,7 @@ describe('zenodo_read_file — ZIP members', () => {
       files_access: 'public',
     });
     expect(enrichment.notice).toBe(
-      'Showing bytes 0–239 of 2000; call zenodo_read_file again with max_bytes 2000 to read the whole member.',
+      'Showing bytes 0–239 of 2,000; call zenodo_read_file again with max_bytes 2000 to read the whole member.',
     );
   });
 
@@ -632,7 +636,7 @@ describe('zenodo_read_file — ZIP members', () => {
       max_bytes: 256,
     });
     expect(small.enrichment.notice).toBe(
-      `Showing bytes 0–252 of ${big.length}; the member is larger than the 65536-byte read cap, so download the archive from download_url for the rest (max_bytes 65536 shows more of its start).`,
+      `Showing bytes 0–252 of ${big.length.toLocaleString('en-US')}; the member is larger than the 65,536-byte read cap, so download the archive from download_url for the rest (max_bytes 65536 shows more of its start).`,
     );
     const capped = await call({
       id: '22705923',
@@ -641,7 +645,7 @@ describe('zenodo_read_file — ZIP members', () => {
       max_bytes: 65_536,
     });
     expect(capped.enrichment.notice).toMatch(
-      /the member is larger than the 65536-byte read cap, so download the archive from download_url for the rest\.$/,
+      /the member is larger than the 65,536-byte read cap, so download the archive from download_url for the rest\.$/,
     );
   });
 
@@ -812,6 +816,185 @@ describe('zenodo_read_file — ZIP members', () => {
   });
 });
 
+describe('zenodo_read_file — the 65,536-byte max_bytes cap', () => {
+  const BIG_PATH = '/records/22705923/files/data/big.csv';
+  const bigRecord = () =>
+    withEntries(recordFixture(), [{ key: 'data/big.csv', size: BIG.length, mimetype: 'text/csv' }]);
+  const ranges = () => contentCalls().map((c) => c.request.headers.get('range'));
+  const memberListing = () => {
+    const listing = zipListing();
+    listing.entries.push({
+      key: 'scikit-learn-1.9.1/CHANGES.md',
+      size: BIG_MEMBER.length,
+      compressed_size: 900,
+      mimetype: 'text/markdown',
+    });
+    return listing;
+  };
+
+  it('reads at most 65,536 bytes at max_bytes 65536, with no cap note', async () => {
+    serveRecord('22705923', bigRecord);
+    serveRanged(BIG_PATH, BIG);
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: 'data/big.csv',
+      max_bytes: 65_536,
+    });
+    expect(ranges()).toEqual(['bytes=0-65535']);
+    expect(result).toMatchObject({
+      status: 'text',
+      file_size: 150_000,
+      bytes_returned: 65_500,
+      has_more: true,
+      next_offset: 65_500,
+    });
+    expect(enrichment).toEqual({
+      notice:
+        'Showing bytes 0–65499 of 150,000; call zenodo_read_file again with offset_bytes 65500.',
+    });
+  });
+
+  it('serves max_bytes 65537 at 65,536 and walks the file to its end, each next_offset parsing back at max_bytes 65537', async () => {
+    serveRecord('22705923', bigRecord);
+    serveRanged(BIG_PATH, BIG);
+    const input = { id: '22705923', key: 'data/big.csv', max_bytes: 65_537 };
+    const note = 'max_bytes 65537 is capped at 65536 per call';
+
+    const first = await call(input);
+    expect(first.result).toMatchObject({
+      offset_bytes: 0,
+      bytes_returned: 65_500,
+      has_more: true,
+      next_offset: 65_500,
+    });
+    expect(first.enrichment.notice).toBe(
+      `Showing bytes 0–65499 of 150,000 (${note}); call zenodo_read_file again with offset_bytes 65500.`,
+    );
+
+    const second = await call({ ...input, offset_bytes: first.result.next_offset });
+    expect(second.result).toMatchObject({
+      offset_bytes: 65_500,
+      bytes_returned: 65_500,
+      has_more: true,
+      next_offset: 131_000,
+    });
+    expect(second.enrichment.notice).toBe(
+      `Showing bytes 65500–130999 of 150,000 (${note}); call zenodo_read_file again with offset_bytes 131000.`,
+    );
+
+    const last = await call({ ...input, offset_bytes: second.result.next_offset });
+    expect(last.result).toMatchObject({ offset_bytes: 131_000, bytes_returned: 19_000 });
+    expect(last.result.has_more).toBe(false);
+    expect(last.result).not.toHaveProperty('next_offset');
+    expect(last.enrichment).toEqual({});
+
+    expect(ranges()).toEqual(['bytes=0-65535', 'bytes=65500-131035', 'bytes=131000-196535']);
+    expect([first, second, last].map((w) => w.result.text).join('')).toBe(
+      new TextDecoder().decode(BIG),
+    );
+  });
+
+  it('cuts a 200 that ignored Range at the applied 65,536 bytes', async () => {
+    serveRecord('22705923', bigRecord);
+    serveContent(BIG_PATH, () => bytesResponse(BIG));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: 'data/big.csv',
+      max_bytes: 100_000,
+    });
+    expect(ranges()).toEqual(['bytes=0-65535']);
+    expect(result).toMatchObject({ bytes_returned: 65_500, has_more: true, next_offset: 65_500 });
+    expect(enrichment.notice).toBe(
+      'Showing bytes 0–65499 of 150,000 (max_bytes 100000 is capped at 65536 per call); call zenodo_read_file again with offset_bytes 65500.',
+    );
+  });
+
+  it('accepts the largest safe integer and asks for no more than 65,536 bytes past the offset', async () => {
+    serveRecord('22705923', bigRecord);
+    serveRanged(BIG_PATH, BIG);
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: 'data/big.csv',
+      offset_bytes: 100_000,
+      max_bytes: Number.MAX_SAFE_INTEGER,
+    });
+    expect(ranges()).toEqual(['bytes=100000-165535']);
+    expect(result).toMatchObject({ offset_bytes: 100_000, bytes_returned: 50_000 });
+    expect(result.has_more).toBe(false);
+    expect(enrichment).toEqual({});
+  });
+
+  it('reads a small file whole at an over-cap max_bytes, with no cap note', async () => {
+    serveRecord('22705923', textRecord);
+    serveRanged('/records/22705923/files/README.md', encode(README));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: 'README.md',
+      max_bytes: 65_537,
+    });
+    expect(ranges()).toEqual(['bytes=0-65535']);
+    expect(result).toMatchObject({ text: README, has_more: false });
+    expect(enrichment).toEqual({});
+    // The cap lowered max_bytes but held back nothing, so the notice names no cap.
+    expect(readFile.enrichment?.notice?.description).toBe(
+      'Why no text was returned, or how to read the rest of the file, naming the 65,536-byte cap when it held back bytes.',
+    );
+  });
+
+  it('reads a member over the cap to 65,536 bytes and keeps the download notice, naming the cap', async () => {
+    serveRecord('22705923', textRecord);
+    serveZip(memberListing());
+    serveMember('scikit-learn-1.9.1/CHANGES.md', () => bytesResponse(BIG_MEMBER));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/CHANGES.md',
+      max_bytes: 70_000,
+    });
+    expect(result).toMatchObject({
+      status: 'text',
+      file_size: 69_000,
+      bytes_returned: 65_527,
+      has_more: true,
+    });
+    expect(result).not.toHaveProperty('next_offset');
+    expect(enrichment.notice).toBe(
+      'Showing bytes 0–65526 of 69,000 (max_bytes 70000 is capped at 65536 per call); the member is larger than the 65,536-byte read cap, so download the archive from download_url for the rest.',
+    );
+  });
+
+  it('names the cap on a member of unknown size cut at 65,536 bytes', async () => {
+    serveRecord('22705923', textRecord);
+    serveZip();
+    serveMember('scikit-learn-1.9.1/CHANGES.md', () => bytesResponse(BIG_MEMBER));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/CHANGES.md',
+      max_bytes: 70_000,
+    });
+    expect(result).toMatchObject({ bytes_returned: 65_527, has_more: true });
+    expect(result).not.toHaveProperty('file_size');
+    expect(enrichment.notice).toBe(
+      'Showing bytes 0–65526 of an unknown total (max_bytes 70000 is capped at 65536 per call); the member is larger than the 65,536-byte read cap, so download the archive from download_url for the rest.',
+    );
+  });
+
+  it('reads a member under the cap whole at an over-cap max_bytes', async () => {
+    serveRecord('22705923', textRecord);
+    serveZip();
+    serveMember('scikit-learn-1.9.1/README.rst', () => bytesResponse(MEMBER_README));
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/README.rst',
+      max_bytes: 70_000,
+    });
+    expect(result).toMatchObject({ status: 'text', bytes_returned: 2_000, has_more: false });
+    expect(enrichment).toEqual({});
+  });
+});
+
 describe('zenodo_read_file — error contract', () => {
   it.each([
     'https://zenodo.org/badge/latestdoi/12345678',
@@ -872,6 +1055,16 @@ describe('zenodo_read_file — error contract', () => {
     serveRecord('22705923', textRecord);
     const err = await failure({ id: '22705923', key: 'notes.txt', offset_bytes: 600 });
     expectReason(err, 'offset_out_of_range', JsonRpcErrorCode.ValidationError);
+    expect(contentCalls()).toHaveLength(0);
+  });
+
+  it('offset_out_of_range names the file size with thousands separators and offset_bytes as passed', async () => {
+    serveRecord('22917909', () => fixture('record-22917909-csv.json'));
+    const err = await failure({ id: '22917909', key: ALTERSGRUPPEN, offset_bytes: 90_000 });
+    expectReason(err, 'offset_out_of_range', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toContain(
+      `offset_bytes 90000 is at or past the end of ${ALTERSGRUPPEN} (83,958 bytes).`,
+    );
     expect(contentCalls()).toHaveLength(0);
   });
 
@@ -986,21 +1179,52 @@ describe('zenodo_read_file — runToolContract (production output + enrichment p
     );
   });
 
-  it.each([{ max_bytes: 255 }, { max_bytes: 65_537 }, { key: '' }, { offset_bytes: -1 }])(
-    'rejects %j at the schema',
-    async (override) => {
-      const result = await runToolContract(readFile, {
-        id: '22705923',
-        key: 'README.md',
-        ...override,
-      });
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toMatchObject({
-        error: { code: JsonRpcErrorCode.InvalidParams },
-      });
-      expect(fm.calls).toHaveLength(0);
-    },
-  );
+  it('serves max_bytes above 65,536 at the cap, carrying the cap note on both surfaces', async () => {
+    serveRecord('22705923', () =>
+      withEntries(recordFixture(), [
+        { key: 'data/big.csv', size: BIG.length, mimetype: 'text/csv' },
+      ]),
+    );
+    serveRanged('/records/22705923/files/data/big.csv', BIG);
+    const result = await runToolContract(readFile, {
+      id: '22705923',
+      key: 'data/big.csv',
+      max_bytes: 65_537,
+    });
+    expect(result.isError).toBeFalsy();
+    const notice =
+      'Showing bytes 0–65499 of 150,000 (max_bytes 65537 is capped at 65536 per call); call zenodo_read_file again with offset_bytes 65500.';
+    expect(result.structuredContent).toMatchObject({
+      status: 'text',
+      bytes_returned: 65_500,
+      has_more: true,
+      next_offset: 65_500,
+      notice,
+    });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain(
+      '**Offset:** 0 | **Bytes returned:** 65500 | **Has more:** true | **Next offset:** 65500',
+    );
+    expect(text).toContain(notice);
+  });
+
+  it.each([
+    { max_bytes: 255 },
+    { max_bytes: Number.MAX_SAFE_INTEGER + 1 },
+    { key: '' },
+    { offset_bytes: -1 },
+  ])('rejects %j at the schema', async (override) => {
+    const result = await runToolContract(readFile, {
+      id: '22705923',
+      key: 'README.md',
+      ...override,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.InvalidParams },
+    });
+    expect(fm.calls).toHaveLength(0);
+  });
 });
 
 describe('zenodo_read_file — format()', () => {
@@ -1063,6 +1287,20 @@ describe('zenodo_read_file — format()', () => {
     serveRanged('/records/22705923/files/README.md', encode(body));
     const text = textOf((await call({ id: '22705923', key: 'README.md' })).result);
     expect(text).toContain(`\`\`\`\`\`markdown\n${body}\n\`\`\`\`\``);
+  });
+
+  it('opens a bare fence for an extension named after an Object property', async () => {
+    serveRecord('22705923', () =>
+      withEntries(recordFixture(), [
+        { key: 'notes.constructor', size: 3, mimetype: 'text/plain' },
+        { key: 'notes.__proto__', size: 3, mimetype: 'text/plain' },
+      ]),
+    );
+    for (const key of ['notes.constructor', 'notes.__proto__']) {
+      serveRanged(`/records/22705923/files/${key}`, encode('ok\n'));
+      const text = textOf((await call({ id: '22705923', key })).result);
+      expect(text).toContain(`${key} — shown as data:\n\`\`\`\nok\n\n\`\`\``);
+    }
   });
 
   it('keeps a depositor-supplied key inside its slot', async () => {

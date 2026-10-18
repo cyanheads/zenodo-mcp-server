@@ -1,0 +1,315 @@
+{
+  "id": "5904106",
+  "pids": {
+    "doi": {
+      "identifier": "10.5061/dryad.05qfttf2q",
+      "provider": "external"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:5904106",
+      "provider": "oai"
+    }
+  },
+  "revision_id": 6,
+  "versions": {
+    "is_latest": true,
+    "index": 1
+  },
+  "stats": {
+    "this_version": {
+      "views": 158,
+      "unique_views": 155,
+      "downloads": 372,
+      "unique_downloads": 348,
+      "data_volume": 7154137510.0
+    },
+    "all_versions": {
+      "views": 159,
+      "unique_views": 156,
+      "downloads": 373,
+      "unique_downloads": 349,
+      "data_volume": 7154634237.0
+    }
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "public",
+    "status": "open",
+    "embargo": {
+      "active": false,
+      "until": null,
+      "reason": null
+    }
+  },
+  "files": {
+    "enabled": true,
+    "count": 8,
+    "total_bytes": 132714599,
+    "order": [],
+    "entries": {
+      "Individual_DOC_plots.pdf": {
+        "key": "Individual_DOC_plots.pdf",
+        "size": 708224,
+        "mimetype": "application/pdf",
+        "checksum": "md5:25ab32b7aafe63a023dc423b78985a08"
+      },
+      "Watershed_Data_from_Giesbrecht_et_al_2022.csv": {
+        "key": "Watershed_Data_from_Giesbrecht_et_al_2022.csv",
+        "size": 548163,
+        "mimetype": "text/csv",
+        "checksum": "md5:6f1638260cfaf1ca1df55c7de146f158"
+      },
+      "Streamflow_Data_from_Giesbrecht_et_al_2022.csv": {
+        "key": "Streamflow_Data_from_Giesbrecht_et_al_2022.csv",
+        "size": 130431103,
+        "mimetype": "text/csv",
+        "checksum": "md5:cc2612c094658f79a79391c2eb2bd3b0"
+      },
+      "README.xlsx": {
+        "key": "README.xlsx",
+        "size": 15381,
+        "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "checksum": "md5:012228655582831049668f24db5d38ad"
+      },
+      "DOC_Data_from_Giesbrecht_et_al_2022.csv": {
+        "key": "DOC_Data_from_Giesbrecht_et_al_2022.csv",
+        "size": 496727,
+        "mimetype": "text/csv",
+        "checksum": "md5:7ab0380ab8ecd5c0e77f9e4350014f6a"
+      },
+      "Gauging_Station_Selection_from_Giesbrecht_et_al_2022.xlsx": {
+        "key": "Gauging_Station_Selection_from_Giesbrecht_et_al_2022.xlsx",
+        "size": 33269,
+        "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "checksum": "md5:7b595492283b0d79afbba63ffad257e2"
+      },
+      "DOC_Station_Selection_from_Giesbrecht_et_al_2022.xlsx": {
+        "key": "DOC_Station_Selection_from_Giesbrecht_et_al_2022.xlsx",
+        "size": 27052,
+        "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "checksum": "md5:1080fb2b942c17d3e6d5530d2a009842"
+      },
+      "Individual_hydrographs.pdf": {
+        "key": "Individual_hydrographs.pdf",
+        "size": 454680,
+        "mimetype": "application/pdf",
+        "checksum": "md5:c9cd2f74832a1dfa95a76f0faa7a4ab3"
+      }
+    }
+  },
+  "parent": {
+    "id": "5904105",
+    "pids": {
+      "doi": null
+    },
+    "communities": {
+      "ids": ["734b6452-1f40-4db0-b218-08ab1d568b7f"],
+      "entries": [
+        {
+          "id": "734b6452-1f40-4db0-b218-08ab1d568b7f",
+          "slug": "dryad",
+          "metadata": {
+            "title": "Dryad"
+          }
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "dataset",
+      "title": {
+        "de": "Datensatz",
+        "en": "Dataset"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Giesbrecht, Ian",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7013-4766",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Simon Fraser University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Tank, Suzanne",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-5371-6577",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Alberta"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Frazer, Gordon"
+        },
+        "affiliations": [
+          {
+            "name": "GWF LiDAR Analytics and Hakai Institute*"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Hood, Eran",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-6114-417X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Alaska Southeast"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Gonzalez Arriola, Santiago"
+        },
+        "affiliations": [
+          {
+            "name": "Hakai Institute*"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Butman, David"
+        },
+        "affiliations": [
+          {
+            "name": "University of Washington"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "D'Amore, Dave"
+        },
+        "affiliations": [
+          {
+            "name": "USDA Forest Service"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Hutchinson, David",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7158-5702",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Water Survey of Canada*"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Bidlack, Allison"
+        },
+        "affiliations": [
+          {
+            "name": "University of Alaska Southeast"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Lertzman, Ken",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-4211-2188",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Simon Fraser University"
+          }
+        ]
+      }
+    ],
+    "title": "Data from: Watershed classification predicts streamflow regime and organic carbon dynamics in the Northeast Pacific Coastal Temperate Rainforest",
+    "publisher": "Zenodo",
+    "publication_date": "2022-01-25",
+    "related_identifiers": [
+      {
+        "identifier": "10.21966/1.715755",
+        "scheme": "doi",
+        "relation_type": {
+          "id": "issupplementedby",
+          "title": {
+            "de": "Wird ergänzt durch",
+            "en": "Is supplemented by"
+          }
+        }
+      }
+    ],
+    "rights": [
+      {
+        "id": "cc0-1.0",
+        "title": {
+          "en": "Creative Commons Zero v1.0 Universal"
+        },
+        "description": {
+          "en": "CC0 waives copyright interest in a work you've created and dedicates it to the world-wide public domain. Use CC0 to opt out of copyright entirely and ensure your work has the widest reach."
+        },
+        "icon": "cc-cc0-icon",
+        "props": {
+          "url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+          "scheme": "spdx"
+        }
+      }
+    ],
+    "description": "<p class=\"Abstract\">Watershed classification has long been a key tool in the hydrological sciences, but few studies have been extended to biogeochemistry. We developed a combined hydro-biogeochemical classification for watersheds draining to the coastal margin of the Northeast Pacific coastal temperate rainforest (1,443,062<i> </i>km<sup>2</sup>), including 2,695 small coastal rivers (SCR) and 10 large continental watersheds. We used cluster analysis to group SCR watersheds into 12 types, based on watershed properties. The most important variables for distinguishing SCR watershed types were evapotranspiration, slope, snowfall, and total precipitation. We used both streamflow and dissolved organic carbon (DOC) measurements from rivers (<i>n</i> = 104 and 90 watersheds respectively) to validate the classification. Watershed types corresponded with broad differences in streamflow regime, mean annual runoff, DOC seasonality, and mean DOC concentration. These links between watershed type and river conditions enabled the first region-wide empirical characterization of river hydro-biogeochemistry at the land-sea margin, spanning extensive ungauged and unsampled areas. We found very high annual runoff (mean &gt; 3000 mm, <i>n</i> = 10) in three watershed types totaling 59,024 km<sup>2</sup> and ranging from heavily glacierized mountain watersheds with high flow in summer to a rain-fed mountain watershed type with high flow in fall-winter. DOC hotspots (mean &gt; 4 mg L<sup>-1</sup>, <i>n</i> = 14) were found in three other watershed types (48,557 km<sup>2</sup>) with perhumid rainforest climates and less-mountainous topography. We described four patterns of DOC seasonality linked to watershed hydrology, with fall-flushing being widespread. Hydro-biogeochemical watershed classification may be useful for other complex regions with sparse observation networks.</p>",
+    "additional_descriptions": [
+      {
+        "description": "<p>This data package contains several datasets corresponding with the manuscript <em>Watershed classification predicts streamflow regime and organic carbon dynamics in the Northeast Pacific Coastal Temperate Rainforest</em>, in review at Global Biogeochemical Cycles (Giesbrecht et al., 2022). </p>\n\n<p>1. Watershed properties including the watershed type defined by cluster analysis</p>\n\n<p>2. Metadata for streamflow gauging station assessment and selection</p>\n\n<p>3. Streamflow data from gauging stations</p>\n\n<p>4. Metadata for Dissolved Organic Carbon (DOC) site assessment and selection</p>\n\n<p>5. DOC data from river observation sites</p>\n\n<p>6. Streamflow hydrographs for individual watersheds</p>\n\n<p>7. Monthly DOC concentration plots for individual watersheds</p>\n\n<p>All variables are defined in the README file. For full details, see the corresponding manuscript and the source datasets.</p>\n\n<p>These files include both primary data sources and processed data derived from other publicly accessible data sources. The source is named for each case of streamflow or DOC data.</p>\n<p>Funding provided by: Tula Foundation<br>Crossref Funder Registry ID: http://dx.doi.org/10.13039/100014446<br>Award Number: </p><p>Funding provided by: Simon Fraser University<br>Crossref Funder Registry ID: http://dx.doi.org/10.13039/501100004326<br>Award Number: </p><p>Funding provided by: Natural Sciences and Engineering Research Council of Canada<br>Crossref Funder Registry ID: http://dx.doi.org/10.13039/501100000038<br>Award Number: </p>",
+        "type": {
+          "id": "notes",
+          "title": {
+            "de": "Anmerkungen",
+            "en": "Notes"
+          }
+        }
+      }
+    ]
+  }
+}

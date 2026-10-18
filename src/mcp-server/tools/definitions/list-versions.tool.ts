@@ -10,11 +10,9 @@ import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { parseRecordRef } from '@/services/zenodo/identifiers.js';
 import type { VersionsLookup } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import { applyCap, hasMorePages, PAGE_SIZE_CAP, windowRejection } from '../paging.js';
 import { notOnZenodoMiss, recordMiss, TombstoneSchema } from '../record-miss.js';
 import { inline, quoteBlock } from '../render.js';
-
-/** Zenodo answers HTTP 400 when page × size passes this window. */
-const RESULT_WINDOW = 10_000;
 
 export const listVersions = tool('zenodo_list_versions', {
   title: 'List Zenodo record versions',
@@ -35,8 +33,16 @@ export const listVersions = tool('zenodo_list_versions', {
       .int()
       .min(1)
       .default(1)
-      .describe('Result page, starting at 1. page × size may not exceed 10,000.'),
-    size: z.number().int().min(1).max(25).default(25).describe('Versions per page (1–25).'),
+      .describe(
+        'Result page, starting at 1. Zenodo pages through only the first 10,000 versions, so the last reachable page is 10,000 ÷ size rounded up (400 at size 25).',
+      ),
+    size: z
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .default(25)
+      .describe('Versions per page, at most 25 per call; larger values return 25.'),
   }),
   output: z.object({
     found: z.boolean().describe('True when the version series resolved.'),
@@ -76,7 +82,7 @@ export const listVersions = tool('zenodo_list_versions', {
         'Record id of the newest version. Present when found, unless Zenodo cannot name it for a page past the end.',
       ),
     page: z.number().describe('Page returned.'),
-    size: z.number().describe('Page size applied.'),
+    size: z.number().describe('Page size applied: size, or 25 when size asked for more.'),
     has_more: z.boolean().describe('True when another page of versions follows.'),
     next_page: z.number().optional().describe('The next page number, when has_more.'),
     versions: z
@@ -128,9 +134,12 @@ export const listVersions = tool('zenodo_list_versions', {
   enrichment: {
     truncated: z.boolean().describe('True when more versions follow this page.'),
     shown: z.number().describe('Versions returned on this page.'),
-    cap: z.number().describe('Page size applied.'),
+    cap: z.number().describe('Page size applied (at most 25).'),
     totalCount: z.number().describe('Number of versions in the series.'),
-    notice: z.string().optional().describe('Guidance on paging or a page past the end.'),
+    notice: z
+      .string()
+      .optional()
+      .describe('Guidance on paging, the 25-per-call size cap, or a page past the end.'),
   },
   errors: [
     {
@@ -143,7 +152,7 @@ export const listVersions = tool('zenodo_list_versions', {
     {
       reason: 'result_window_exceeded',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'page × size exceeds 10,000',
+      when: 'The page starts past the first 10,000 versions: (page − 1) × size is 10,000 or more, counting a size above 25 as 25',
       recovery:
         'Zenodo pages only the first 10,000 versions of a series, and no series comes near that; call zenodo_list_versions with page 1 (total_versions and has_more show how far the series goes).',
     },
@@ -176,14 +185,11 @@ export const listVersions = tool('zenodo_list_versions', {
   ],
 
   async handler(input, ctx) {
-    ctx.enrich({ truncated: false, shown: 0, cap: input.size, totalCount: 0 });
+    const { applied: size, capNote } = applyCap('size', input.size, PAGE_SIZE_CAP);
+    ctx.enrich({ truncated: false, shown: 0, cap: size, totalCount: 0 });
 
-    if (input.page * input.size > RESULT_WINDOW) {
-      throw ctx.fail(
-        'result_window_exceeded',
-        `page ${input.page} × size ${input.size} is past the first ${RESULT_WINDOW.toLocaleString('en-US')} versions Zenodo pages through.`,
-      );
-    }
+    const pastWindow = windowRejection(input.page, size, 'versions', capNote);
+    if (pastWindow) throw ctx.fail('result_window_exceeded', pastWindow);
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
@@ -191,7 +197,7 @@ export const listVersions = tool('zenodo_list_versions', {
     }
     const service = getZenodoService();
     const inputKind = ref.inputKind;
-    const miss = { found: false, input_kind: inputKind, page: input.page, size: input.size };
+    const miss = { found: false, input_kind: inputKind, page: input.page, size };
 
     let recid: string;
     if (ref.kind === 'external_doi') {
@@ -209,7 +215,7 @@ export const listVersions = tool('zenodo_list_versions', {
       recid = ref.recid;
     }
 
-    let lookup: VersionsLookup = await service.listVersions(recid, input.page, input.size, ctx);
+    let lookup: VersionsLookup = await service.listVersions(recid, input.page, size, ctx);
     if (lookup.status === 'not_found' || lookup.total === 0) {
       // A concept id 404s on /versions and a deleted recid answers 200 with no hits; the record GET classifies every miss.
       const record = await service.getRecord(recid, ctx);
@@ -218,7 +224,7 @@ export const listVersions = tool('zenodo_list_versions', {
       }
       if (record.record.recid !== recid) {
         recid = record.record.recid;
-        lookup = await service.listVersions(recid, input.page, input.size, ctx);
+        lookup = await service.listVersions(recid, input.page, size, ctx);
       }
       if (lookup.status === 'not_found') lookup = { status: 'ok', total: 0, hits: [] };
       lookup = {
@@ -236,19 +242,19 @@ export const listVersions = tool('zenodo_list_versions', {
     const latestRecid =
       hits.find((h) => h.is_latest)?.recid ??
       (input.page === 1 ? hits[0]?.recid : await service.latestRecid(recid, ctx));
-    const hasMore = input.page * input.size < total;
+    const hasMore = hasMorePages(input.page, size, total);
 
     ctx.enrich({ shown: hits.length });
     ctx.enrich.total(total);
     if (hasMore) {
       ctx.enrich.truncated({
         shown: hits.length,
-        cap: input.size,
-        guidance: `Showing ${hits.length} of ${total} versions; call again with page ${input.page + 1}.`,
+        cap: size,
+        guidance: `Showing ${hits.length} of ${total.toLocaleString('en-US')} versions${capNote ? ` (${capNote})` : ''}; call again with page ${input.page + 1}.`,
       });
     } else if (total > 0 && hits.length === 0) {
       ctx.enrich.notice(
-        `Page ${input.page} is past the last page (${Math.max(1, Math.ceil(total / input.size))}).`,
+        `Page ${input.page} is past the last page (${Math.max(1, Math.ceil(total / size))}).`,
       );
     }
 
@@ -260,7 +266,7 @@ export const listVersions = tool('zenodo_list_versions', {
       total_versions: total,
       ...(latestRecid ? { latest_recid: latestRecid } : {}),
       page: input.page,
-      size: input.size,
+      size,
       has_more: hasMore,
       ...(hasMore ? { next_page: input.page + 1 } : {}),
       versions: hits,

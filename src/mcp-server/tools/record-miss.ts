@@ -48,10 +48,14 @@ export function recordMiss(recid: string, lookup: Exclude<RecordLookup, { status
   }
 }
 
-/** `miss_kind` and guidance for a non-Zenodo DOI that no Zenodo record carries. */
+/**
+ * `miss_kind` and guidance for a non-Zenodo DOI that no Zenodo record carries. Only
+ * Zenodo was searched, so the guidance offers the DOI resolver without claiming the
+ * DOI resolves there.
+ */
 export function notOnZenodoMiss(doi: string) {
   return {
     miss_kind: 'not_on_zenodo' as const,
-    guidance: `DOI ${doi} is not registered to a Zenodo record. It resolves elsewhere at https://doi.org/${doi}; to find a related deposit, search by title with zenodo_search_records.`,
+    guidance: `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or search by title with zenodo_search_records to find a related deposit.`,
   };
 }

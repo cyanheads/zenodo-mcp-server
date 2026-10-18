@@ -359,23 +359,33 @@ describe('zenodo_list_versions — misses (found: false)', () => {
     },
   );
 
-  it('not_on_zenodo: an external DOI misses as given and with trailing punctuation stripped', async () => {
-    serveDoiSearch({ hits: { hits: [], total: 0 } });
-    const { result, enrichment } = await call({ id: '10.1038/nature12373.' });
-    expect(fm.calls).toHaveLength(2);
-    expect(result).toEqual({
-      found: false,
-      input_kind: 'external_doi',
-      miss_kind: 'not_on_zenodo',
-      guidance:
-        'DOI 10.1038/nature12373 is not registered to a Zenodo record. It resolves elsewhere at https://doi.org/10.1038/nature12373; to find a related deposit, search by title with zenodo_search_records.',
-      page: 1,
-      size: 25,
-      has_more: false,
-      versions: [],
-    });
-    expect(enrichment).toEqual({ truncated: false, shown: 0, cap: 25, totalCount: 0 });
-  });
+  it.each([
+    ['10.1038/nature12373.', '10.1038/nature12373', 2],
+    ['10.9999/zzqvnonexistent20261013', '10.9999/zzqvnonexistent20261013', 1],
+  ])(
+    'not_on_zenodo for %s names %s and claims nothing about resolving elsewhere',
+    async (id, doi, searches) => {
+      serveDoiSearch({ hits: { hits: [], total: 0 } });
+      const { result, enrichment } = await call({ id });
+      expect(fm.calls.map((c) => new URL(c.request.url).origin)).toEqual(
+        Array(searches).fill('https://zenodo.org'),
+      );
+      expect(paths()).toEqual(Array(searches).fill('/api/records'));
+      const guidance = `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or search by title with zenodo_search_records to find a related deposit.`;
+      expect(result).toEqual({
+        found: false,
+        input_kind: 'external_doi',
+        miss_kind: 'not_on_zenodo',
+        guidance,
+        page: 1,
+        size: 25,
+        has_more: false,
+        versions: [],
+      });
+      expect(textOf(result)).toContain(`**Guidance:** ${guidance}`);
+      expect(enrichment).toEqual({ truncated: false, shown: 0, cap: 25, totalCount: 0 });
+    },
+  );
 });
 
 describe('zenodo_list_versions — error contract', () => {
@@ -390,16 +400,20 @@ describe('zenodo_list_versions — error contract', () => {
   });
 
   it.each([
-    { page: 401, size: 25 },
-    { page: 10_001, size: 1 },
-  ])('result_window_exceeded for %j, before any upstream call', async (paging) => {
-    const err = await failure({ id: '591564', ...paging });
-    expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
-    expect(err.message).toBe(
-      `page ${paging.page} × size ${paging.size} is past the first 10,000 versions Zenodo pages through.`,
-    );
-    expect(fm.calls).toHaveLength(0);
-  });
+    [{ page: 401, size: 25 }, 400],
+    [{ page: 10_001, size: 1 }, 10_000],
+    [{ page: 3_335, size: 3 }, 3_334],
+  ])(
+    'result_window_exceeded for %j, naming the last page, before any upstream call',
+    async (paging, last) => {
+      const err = await failure({ id: '591564', ...paging });
+      expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+      expect(err.message).toBe(
+        `Page ${paging.page} at size ${paging.size} starts past the first 10,000 versions; the last reachable page at size ${paging.size} is ${last}.`,
+      );
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
 
   it('sends page × size exactly at the 10,000 window upstream', async () => {
     serveVersions('22705923', hitsBody([], 47));
@@ -409,6 +423,57 @@ describe('zenodo_list_versions — error contract', () => {
     expect(result).toMatchObject({ found: true, total_versions: 47, versions: [] });
     expect(enrichment.notice).toBe('Page 400 is past the last page (2).');
   });
+
+  it('sends the page straddling the window upstream and reports it past the end of a 47-version series', async () => {
+    serveVersions('591564', { status: 404 }, 404);
+    serveRecord('591564', recordFixture);
+    serveVersions('22705923', hitsBody([], 47));
+    serveLatest('22705923', 'https://zenodo.org/api/records/22705923');
+    const { result, enrichment } = await call({ id: '591564', page: 3_334, size: 3 });
+    expect(queryOf(fm.calls[2]?.request as Request)).toEqual([
+      ['page', '3334'],
+      ['size', '3'],
+      ['sort', 'version'],
+    ]);
+    expect(result).toMatchObject({
+      found: true,
+      total_versions: 47,
+      page: 3_334,
+      size: 3,
+      has_more: false,
+      versions: [],
+    });
+    expect(enrichment.notice).toBe('Page 3334 is past the last page (16).');
+  });
+
+  /** [size, the straddling last page]: sizes that do not divide 10,000. */
+  it.each([
+    [3, 3_334],
+    [7, 1_429],
+    [23, 435],
+  ])(
+    'size %i: has_more stops at the window, and the emitted next_page parses back and reaches page %i',
+    async (size, last) => {
+      serveVersions('22705923', () => pageWithLatest([false, false, false], 50_000));
+      serveLatest('22705923', 'https://zenodo.org/api/records/22705923');
+      const before = await call({ id: '22705923', page: last - 1, size });
+      expect(before.result).toMatchObject({ has_more: true, next_page: last });
+
+      const next = listVersions.input.parse({
+        id: '22705923',
+        page: before.result.next_page,
+        size,
+      });
+      const { result } = await call(next);
+      expect(
+        fm.calls
+          .filter((c) => new URL(c.request.url).pathname === '/api/records/22705923/versions')
+          .map((c) => queryOf(c.request).find(([k]) => k === 'page')?.[1]),
+      ).toEqual([String(last - 1), String(last)]);
+      expect(result).toMatchObject({ page: last, has_more: false, total_versions: 50_000 });
+      expect(result).not.toHaveProperty('next_page');
+    },
+  );
 
   it('record_unavailable after a /versions 500 and its one retry', async () => {
     serveVersions('1004', { status: 500 }, 500);
@@ -532,12 +597,100 @@ describe('zenodo_list_versions — runToolContract (production output + enrichme
     expect((result.content[0] as { text: string }).text).toContain(recovery('upstream_timeout'));
   });
 
-  it('rejects a size above 25 at the schema', async () => {
-    const result = await runToolContract(listVersions, { id: '22705923', size: 26 });
+  it.each([10_001, 0])('rejects size %i at the schema', async (size) => {
+    const result = await runToolContract(listVersions, { id: '22705923', size });
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       error: { code: JsonRpcErrorCode.InvalidParams },
     });
+    expect(fm.calls).toHaveLength(0);
+  });
+});
+
+describe('zenodo_list_versions — the 25-per-call size cap', () => {
+  /** `n` page-one hits (cycled, with distinct recids) out of `total`. */
+  function versionsPage(n: number, total: number) {
+    const base = pageOne().hits.hits;
+    const hits = Array.from({ length: n }, (_, i) => ({
+      ...(base[i % base.length] as RawRecord),
+      id: String(22_705_923 - i),
+    }));
+    return hitsBody(hits, total);
+  }
+
+  it('serves size 26 at 25: the request, output, cap, and next_page use 25, and the notice names both', async () => {
+    serveVersions('22705923', () => versionsPage(25, 47));
+    const result = await runToolContract(listVersions, { id: '22705923', size: 26 });
+    expect(queryOf(fm.calls[0]?.request as Request)).toEqual([
+      ['page', '1'],
+      ['size', '25'],
+      ['sort', 'version'],
+    ]);
+    const notice =
+      'Showing 25 of 47 versions (size 26 is capped at 25 per call); call again with page 2.';
+    expect(result.structuredContent).toMatchObject({
+      size: 25,
+      has_more: true,
+      next_page: 2,
+      truncated: true,
+      shown: 25,
+      cap: 25,
+      notice,
+    });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain('**Page:** 1 | **Size:** 25 | **Has more:** true | **Next page:** 2');
+    expect(text).toContain(notice);
+  });
+
+  it('reports the applied size on a miss', async () => {
+    serveVersions('22705918', { hits: { hits: [], total: 0 } });
+    serveRecord('22705918', fixture('tombstone-22705918.json'), 410);
+    const { result, enrichment } = await call({ id: '22705918', size: 26 });
+    expect(queryOf(fm.calls[0]?.request as Request)).toContainEqual(['size', '25']);
+    expect(result).toMatchObject({ found: false, miss_kind: 'deleted', size: 25 });
+    expect(enrichment).toEqual({ truncated: false, shown: 0, cap: 25, totalCount: 0 });
+  });
+
+  it('names no cap when the whole series fit', async () => {
+    serveVersions('22705923', () => hitsBody(pageOne().hits.hits, 3));
+    const { result, enrichment } = await call({ id: '22705923', size: 100 });
+    expect(queryOf(fm.calls[0]?.request as Request)).toContainEqual(['size', '25']);
+    expect(result).toMatchObject({ size: 25, has_more: false, total_versions: 3 });
+    expect(enrichment).toEqual({ truncated: false, shown: 3, cap: 25, totalCount: 3 });
+  });
+
+  it('prints the series total with thousands separators, page numbers as call arguments', async () => {
+    serveVersions('22705923', () => versionsPage(25, 1_234));
+    const result = await runToolContract(listVersions, { id: '22705923' });
+    const notice = 'Showing 25 of 1,234 versions; call again with page 2.';
+    expect(result.structuredContent).toMatchObject({ total_versions: 1_234, notice });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain('**Versions:** 1234');
+    expect(text).toContain(notice);
+  });
+
+  it('names page numbers past 999 as call arguments when the page is past the end', async () => {
+    serveVersions('22705923', hitsBody([], 1_234));
+    serveLatest('22705923', 'https://zenodo.org/api/records/22705923');
+    const { enrichment } = await call({ id: '22705923', page: 1_500, size: 1 });
+    expect(enrichment.notice).toBe('Page 1500 is past the last page (1234).');
+  });
+
+  it('reports a page past the end at the capped size', async () => {
+    serveVersions('22705923', hitsBody([], 47));
+    serveLatest('22705923', 'https://zenodo.org/api/records/22705923');
+    const { result, enrichment } = await call({ id: '22705923', page: 3, size: 10_000 });
+    expect(queryOf(fm.calls[0]?.request as Request)).toContainEqual(['size', '25']);
+    expect(result).toMatchObject({ page: 3, size: 25, has_more: false, versions: [] });
+    expect(enrichment).toMatchObject({ cap: 25, notice: 'Page 3 is past the last page (2).' });
+  });
+
+  it('rejects a page past the window at the capped size, naming the cap', async () => {
+    const err = await failure({ id: '591564', page: 401, size: 100 });
+    expectReason(err, 'result_window_exceeded', JsonRpcErrorCode.ValidationError);
+    expect(err.message).toBe(
+      'Page 401 at size 25 starts past the first 10,000 versions (size 100 is capped at 25 per call); the last reachable page at size 25 is 400.',
+    );
     expect(fm.calls).toHaveLength(0);
   });
 });

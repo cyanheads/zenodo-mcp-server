@@ -20,6 +20,7 @@ import {
   JSON_ATTEMPT_MS,
   readCapped,
   readJson,
+  readText,
   ZenodoHttp,
   type ZenodoRequest,
 } from '@/services/zenodo/http.js';
@@ -894,5 +895,29 @@ describe('readCapped', () => {
       bytes: new Uint8Array(0),
       more: false,
     });
+  });
+});
+
+describe('readText', () => {
+  it('refuses a body past 32 MiB unread, naming the cap with thousands separators', async () => {
+    const mebibyte = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent++ < 64) controller.enqueue(mebibyte);
+        else controller.close();
+      },
+    });
+    const err = await readText(new Response(body, { status: 200 })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(McpError);
+    expect(err).toMatchObject({
+      code: JsonRpcErrorCode.ServiceUnavailable,
+      data: { status: 200, retryable: false },
+    });
+    expect((err as McpError).message).toBe(
+      'Zenodo returned a response body over 33,554,432 bytes; it was not read.',
+    );
+    // The 33rd 1-MiB chunk passes the cap; the stream may have queued one more by then.
+    expect(sent).toBeLessThanOrEqual(34);
   });
 });

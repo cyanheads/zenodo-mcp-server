@@ -24,28 +24,35 @@ import {
 } from '@/services/zenodo/text-preview.js';
 import type { ContentRead, ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import { applyCap } from '../paging.js';
 import { fence, inline } from '../render.js';
 import { blankToUndefined } from '../schema-helpers.js';
 
 const STATUSES = ['text', 'not_text', 'restricted', 'empty'] as const;
 type Status = (typeof STATUSES)[number];
 
-/** The largest max_bytes a call accepts. */
+/** Bytes one read covers: a larger max_bytes is served at this many. */
 const MAX_READ_BYTES = 65_536;
 
 /**
- * Guidance when a ZIP member read stops at max_bytes. A member cannot be continued
- * at an offset, so the next step depends on whether one larger read covers it.
+ * Guidance when a ZIP member read stops at the applied max_bytes. A member cannot
+ * be continued at an offset, so the next step depends on whether one larger read
+ * covers it.
  */
-function memberTruncationNotice(end: number, size: number | undefined, maxBytes: number): string {
-  const shown = `Showing bytes 0–${end} of ${size ?? 'an unknown total'}`;
+function memberTruncationNotice(
+  end: number,
+  size: number | undefined,
+  maxBytes: number,
+  capNote: string | undefined,
+): string {
+  const shown = `Showing bytes 0–${end} of ${size?.toLocaleString('en-US') ?? 'an unknown total'}${capNote ? ` (${capNote})` : ''}`;
   if (size !== undefined && size <= MAX_READ_BYTES) {
     return `${shown}; call zenodo_read_file again with max_bytes ${size} to read the whole member.`;
   }
   if (size === undefined && maxBytes < MAX_READ_BYTES) {
     return `${shown}; call zenodo_read_file again with max_bytes ${MAX_READ_BYTES} to read more of this member, and download the archive from download_url if that still stops short.`;
   }
-  return `${shown}; the member is larger than the ${MAX_READ_BYTES}-byte read cap, so download the archive from download_url for the rest${maxBytes < MAX_READ_BYTES ? ` (max_bytes ${MAX_READ_BYTES} shows more of its start)` : ''}.`;
+  return `${shown}; the member is larger than the ${MAX_READ_BYTES.toLocaleString('en-US')}-byte read cap, so download the archive from download_url for the rest${maxBytes < MAX_READ_BYTES ? ` (max_bytes ${MAX_READ_BYTES} shows more of its start)` : ''}.`;
 }
 
 export const readFile = tool('zenodo_read_file', {
@@ -84,9 +91,10 @@ export const readFile = tool('zenodo_read_file', {
       .number()
       .int()
       .min(256)
-      .max(MAX_READ_BYTES)
       .default(16_384)
-      .describe('Maximum bytes to read (256–65536).'),
+      .describe(
+        'Maximum bytes to read (256 or more), at most 65536 per call; larger values return 65536.',
+      ),
   }),
   output: z.object({
     recid: z.string().describe('Record id read from (the latest version for a concept id).'),
@@ -148,7 +156,9 @@ export const readFile = tool('zenodo_read_file', {
     notice: z
       .string()
       .optional()
-      .describe('Why no text was returned, or how to read the rest of the file.'),
+      .describe(
+        'Why no text was returned, or how to read the rest of the file, naming the 65,536-byte cap when it held back bytes.',
+      ),
   },
   errors: [
     {
@@ -233,6 +243,7 @@ export const readFile = tool('zenodo_read_file', {
   ],
 
   async handler(input, ctx) {
+    const { applied: maxBytes, capNote } = applyCap('max_bytes', input.max_bytes, MAX_READ_BYTES);
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
       throw ctx.fail('invalid_identifier', ref.message);
@@ -356,7 +367,7 @@ export const readFile = tool('zenodo_read_file', {
       if (meta.size === 0) return withoutText('empty', `${displayName} is empty.`, meta);
       mode = previewMode(member, meta.mimetype);
       if (mode === 'binary') return notPreviewable();
-      read = await service.readMember(recid, entry.key, member, input.max_bytes, ctx);
+      read = await service.readMember(recid, entry.key, member, maxBytes, ctx);
       if (read.status === 'not_found') {
         throw ctx.fail(
           'member_not_found',
@@ -371,7 +382,7 @@ export const readFile = tool('zenodo_read_file', {
       if (meta.size !== undefined && input.offset_bytes >= meta.size && meta.size > 0) {
         throw ctx.fail(
           'offset_out_of_range',
-          `offset_bytes ${input.offset_bytes} is at or past the end of ${displayName} (${meta.size} bytes).`,
+          `offset_bytes ${input.offset_bytes} is at or past the end of ${displayName} (${meta.size.toLocaleString('en-US')} bytes).`,
         );
       }
       if (meta.size === 0) {
@@ -385,7 +396,7 @@ export const readFile = tool('zenodo_read_file', {
       }
       mode = previewMode(entry.key, meta.mimetype);
       if (mode === 'binary') return notPreviewable();
-      read = await service.readContent(recid, entry.key, input.offset_bytes, input.max_bytes, ctx);
+      read = await service.readContent(recid, entry.key, input.offset_bytes, maxBytes, ctx);
       if (read.status === 'range_not_satisfiable') {
         throw ctx.fail(
           'offset_out_of_range',
@@ -445,8 +456,8 @@ export const readFile = tool('zenodo_read_file', {
       const end = nextOffset - 1;
       ctx.enrich.notice(
         member
-          ? memberTruncationNotice(end, meta.size, input.max_bytes)
-          : `Showing bytes ${input.offset_bytes}–${end} of ${meta.size ?? 'an unknown total'}; call zenodo_read_file again with offset_bytes ${nextOffset}.`,
+          ? memberTruncationNotice(end, meta.size, maxBytes, capNote)
+          : `Showing bytes ${input.offset_bytes}–${end} of ${meta.size?.toLocaleString('en-US') ?? 'an unknown total'}${capNote ? ` (${capNote})` : ''}; call zenodo_read_file again with offset_bytes ${nextOffset}.`,
       );
     }
 

@@ -11,8 +11,12 @@ import { parseRecordRef } from '@/services/zenodo/identifiers.js';
 import { isZip, previewMode } from '@/services/zenodo/text-preview.js';
 import type { ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
+import { applyCap } from '../paging.js';
 import { inline } from '../render.js';
 import { blankToUndefined } from '../schema-helpers.js';
+
+/** Entries per page: a larger `limit` is served at this many. */
+const LIMIT_CAP = 200;
 
 /** True when zenodo_read_file reads the file rather than refusing it unread. */
 const readsAsText = (key: string, mimetype: string | undefined) =>
@@ -53,7 +57,13 @@ export const listFiles = tool('zenodo_list_files', {
         'Case-insensitive substring filter on file keys (manifest) or member paths (archive), applied before paging.',
       ),
     offset: z.number().int().min(0).default(0).describe('Entries to skip before this page.'),
-    limit: z.number().int().min(1).max(200).default(50).describe('Entries per page (1–200).'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .default(50)
+      .describe('Entries per page, at most 200 per call; larger values return 200.'),
   }),
   output: z.object({
     recid: z
@@ -73,7 +83,7 @@ export const listFiles = tool('zenodo_list_files', {
     files_enabled: z.boolean().describe('False for a metadata-only deposit.'),
     key_contains: z.string().optional().describe('The key filter applied, when set.'),
     offset: z.number().describe('Entries skipped before this page.'),
-    limit: z.number().describe('Page size applied.'),
+    limit: z.number().describe('Page size applied: limit, or 200 when limit asked for more.'),
     matched: z.number().describe('Entries matching the filter, before paging.'),
     has_more: z.boolean().describe('True when more matching entries follow this page.'),
     next_offset: z.number().optional().describe('Offset of the next page, when has_more.'),
@@ -151,12 +161,14 @@ export const listFiles = tool('zenodo_list_files', {
   enrichment: {
     truncated: z.boolean().describe('True when more matching entries follow this page.'),
     shown: z.number().describe('Entries returned on this page.'),
-    cap: z.number().describe('Page size applied.'),
+    cap: z.number().describe('Page size applied (at most 200).'),
     totalCount: z.number().describe('Entries matching the filter, before paging.'),
     notice: z
       .string()
       .optional()
-      .describe('File access notes, empty-filter guidance, listing caps, or paging guidance.'),
+      .describe(
+        'File access notes, empty-filter guidance, listing caps, the 200-per-call limit cap, or paging guidance.',
+      ),
   },
   errors: [
     {
@@ -221,7 +233,8 @@ export const listFiles = tool('zenodo_list_files', {
   ],
 
   async handler(input, ctx) {
-    ctx.enrich({ truncated: false, shown: 0, cap: input.limit, totalCount: 0 });
+    const { applied: limit, capNote } = applyCap('limit', input.limit, LIMIT_CAP);
+    ctx.enrich({ truncated: false, shown: 0, cap: limit, totalCount: 0 });
 
     const ref = parseRecordRef(input.id);
     if (ref.kind === 'invalid') {
@@ -269,7 +282,7 @@ export const listFiles = tool('zenodo_list_files', {
       files_enabled: files.enabled,
       ...(input.key_contains ? { key_contains: input.key_contains } : {}),
       offset: input.offset,
-      limit: input.limit,
+      limit,
     };
     const needle = input.key_contains?.toLowerCase();
 
@@ -303,18 +316,14 @@ export const listFiles = tool('zenodo_list_files', {
         );
       } else if (page.matched > 0 && input.offset >= page.matched) {
         notice.push(
-          `Offset ${input.offset} is past the last of ${page.matched} ${noun}; call again with a lower offset.`,
+          `Offset ${input.offset} is past the last of ${page.matched.toLocaleString('en-US')} ${noun}; call again with a lower offset.`,
         );
       }
       if (page.hasMore) {
         notice.push(
-          `Showing ${page.slice.length} of ${page.matched}; call again with offset ${page.nextOffset}.`,
+          `Showing ${page.slice.length} of ${page.matched.toLocaleString('en-US')}${capNote ? ` (${capNote})` : ''}; call again with offset ${page.nextOffset}.`,
         );
-        ctx.enrich.truncated({
-          shown: page.slice.length,
-          cap: input.limit,
-          guidance: notice.join(' '),
-        });
+        ctx.enrich.truncated({ shown: page.slice.length, cap: limit, guidance: notice.join(' ') });
       } else if (notice.length) {
         ctx.enrich.notice(notice.join(' '));
       }
@@ -330,7 +339,7 @@ export const listFiles = tool('zenodo_list_files', {
       const matching = needle
         ? files.entries.filter((e) => e.key.toLowerCase().includes(needle))
         : files.entries;
-      const page = pageOf(matching, input.offset, input.limit);
+      const page = pageOf(matching, input.offset, limit);
       const paging = finish(page, 'files');
       return {
         ...common,
@@ -376,7 +385,7 @@ export const listFiles = tool('zenodo_list_files', {
     const matching = needle
       ? listing.members.filter((m) => m.path.toLowerCase().includes(needle))
       : listing.members;
-    const page = pageOf(matching, input.offset, input.limit);
+    const page = pageOf(matching, input.offset, limit);
     const paging = finish(page, 'members', listing.upstream_truncated);
     return {
       ...common,

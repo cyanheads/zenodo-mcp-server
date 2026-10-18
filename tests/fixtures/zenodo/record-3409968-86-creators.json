@@ -1,0 +1,1575 @@
+{
+  "id": "3409968",
+  "pids": {
+    "doi": {
+      "identifier": "10.5281/zenodo.3409968",
+      "provider": "datacite",
+      "client": "datacite"
+    },
+    "oai": {
+      "identifier": "oai:zenodo.org:3409968",
+      "provider": "oai"
+    }
+  },
+  "revision_id": 4,
+  "versions": {
+    "is_latest": true,
+    "index": 2
+  },
+  "stats": {
+    "this_version": {
+      "views": 7139,
+      "unique_views": 6682,
+      "downloads": 3586,
+      "unique_downloads": 3164,
+      "data_volume": 5070479548.0
+    },
+    "all_versions": {
+      "views": 15895,
+      "unique_views": 14418,
+      "downloads": 7959,
+      "unique_downloads": 7155,
+      "data_volume": 9893837323.0
+    }
+  },
+  "custom_fields": {},
+  "access": {
+    "record": "public",
+    "files": "public",
+    "status": "open",
+    "embargo": {
+      "active": false,
+      "until": null,
+      "reason": null
+    }
+  },
+  "files": {
+    "enabled": true,
+    "count": 2,
+    "total_bytes": 3014604,
+    "order": [],
+    "entries": {
+      "2019-09-15-Top-10-FAIR-Data-and-Software-Things.pdf": {
+        "key": "2019-09-15-Top-10-FAIR-Data-and-Software-Things.pdf",
+        "size": 1911803,
+        "mimetype": "application/pdf",
+        "checksum": "md5:4a8e697d77a5b27fb8c65d2ada1b5362"
+      },
+      "2019-02-01-Top-10-FAIR-Data-and-Software-Things.pdf": {
+        "key": "2019-02-01-Top-10-FAIR-Data-and-Software-Things.pdf",
+        "size": 1102801,
+        "mimetype": "application/pdf",
+        "checksum": "md5:8146a0ffd67fcf83065495ab9549e2df"
+      }
+    }
+  },
+  "parent": {
+    "id": "2555497",
+    "pids": {
+      "doi": {
+        "identifier": "10.5281/zenodo.2555497",
+        "provider": "datacite",
+        "client": "datacite"
+      }
+    },
+    "communities": {
+      "ids": ["0105501e-fe95-4d51-a648-5d01b963a0e9", "4f74da7f-a992-4753-8a89-c0e2dc5e3dbc"],
+      "entries": [
+        {
+          "id": "0105501e-fe95-4d51-a648-5d01b963a0e9",
+          "slug": "dtl",
+          "metadata": {
+            "title": "Dutch Techcentre for Life Sciences (DTL) and ELIXIR Netherlands - collection of outputs."
+          }
+        },
+        {
+          "id": "4f74da7f-a992-4753-8a89-c0e2dc5e3dbc",
+          "slug": "library-carpentry",
+          "metadata": {
+            "title": "Library Carpentry"
+          }
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "resource_type": {
+      "id": "lesson",
+      "title": {
+        "de": "Unterrichtseinheit",
+        "en": "Lesson"
+      }
+    },
+    "creators": [
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Paula Andrea Martinez",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-8990-1985",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Imaging Facility (NIF) and Characterisation Virtual Laboratory (CVL)"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Christopher Erdmann",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-2554-180X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "California Digital Library / Library Carpentry"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Natasha Simons",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-0635-1998",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Reid Otsuji",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-1842-0295",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC San Diego"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Stephanie Labou",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5633-5983",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC San Diego"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ryan Johnson",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-5800-7796",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC San Diego"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Guilherme Castelao",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-6765-0708",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC San Diego"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Bia Villas Boas",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-6767-6556",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC San Diego"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Anna-Lena Lamprecht",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-1953-5606",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Utrecht"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Carlos Martinez Ortiz",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5565-7577",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "The Netherlands eScience Center"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Leyla Garcia",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-3986-0510",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "EMBL"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Mateusz Kuzak",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-0087-6021",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Dutch Techcentre for Life Sciences"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Liz Stokes",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2973-5647",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Tom Honeyman"
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Sharyn Wise",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7677-780X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Technology, Sydney"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Josh Quan",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-7900-0673",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC Berkeley"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Scott Peterson",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-1920-616X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC Berkeley"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Amy Neeser",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-2523-5079",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UC Berkeley"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Lena Karvovskaya",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7777-5603",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Research Data Management (RDM) support at Utrecht University Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Otto Lange",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-3560-988X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Research Data Management (RDM) support at Utrecht University Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Iza Witkowska"
+        },
+        "affiliations": [
+          {
+            "name": "Research Data Management (RDM) support at Utrecht University Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Jacques Flores"
+        },
+        "affiliations": [
+          {
+            "name": "Research Data Management (RDM) support at Utrecht University Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Fiona Bradley",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-3622-2794",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UNSW Library, and University of Western Australia"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Kristina Hettne",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-4182-7560",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Digital Scholarship, Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Peter Verhaar",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-8469-6804",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Digital Scholarship, Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ben Companjen",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-7023-9047",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Digital Scholarship, Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Laurents Sesink",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7880-5413",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Digital Scholarship, Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Fieke Schoots",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-4385-9312",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Digital Scholarship, Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Erik Schultes",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8888-635X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "GO FAIR International Support and Coordination Office"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Rajaram Kaliyaperumal",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-1215-167X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Leiden University Medical Center"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Erzsébet Tóth-Czifra",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-5350-067X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "DARIAH"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ricardo de Miranda Azevedo",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-7641-6446",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Maastricht University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Sanne Muurling",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-6747-9288",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Leiden University Libraries"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "John Brown",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-6118-577X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Curtin University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Janice Chan",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7300-3489",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Curtin University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Niamh Quigley",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-9542-1577",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Curtin University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Lisa Federer",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5732-5285",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Library of Medicine"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Douglas Joubert",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-4090-5587",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Institutes of Health Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Allissa Dillman",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-0757-048X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Center for Biotechnology Information"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Kenneth Wilkins"
+        },
+        "affiliations": [
+          {
+            "name": "National Institute of Diabetes and Digestive and Kidney Diseases"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ishwar Chandramouliswaran",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-9697-9599",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Institute of Allergy and Infectious Diseases"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Vivek Navale",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-7110-8946",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "NIH Center for Information Technology"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Susan Wright"
+        },
+        "affiliations": [
+          {
+            "name": "National Institute on Drug Abuse"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Silvia Di Giorgio",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-8565-1421",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "ZB MED - Information Center for Life Science, Cologne, Germany"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Mandela Fasemore",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2498-4951",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "ZB MED - Information Center for Life Science, Cologne, Germany"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Konrad Förstner",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-1481-2996",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "ZB MED - Information Center for Life Science, Cologne, Germany"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Till Sauerwein",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5830-4208",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "ZB MED - Information Center for Life Science, Cologne, Germany"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Eva Seidlmayer",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7258-0532",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "ZB MED - Information Center for Life Science, Cologne, Germany"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ilja Zeitlin",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-8531-5639",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Joint Science Conference"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Susannah Bacon"
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Katie Hannan",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-5689-4133",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "CSIRO"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Richard Ferrers",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2923-9889",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Keith Russell",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5390-2719",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Deidre Whitmore",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-4353-530X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UCLA"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Tim Dennis",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-6632-3812",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "UCLA"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Daniel Bangert",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-4981-2870",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Göttingen State and University Library"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Albert Meroño Peñuela",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-4646-5842",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Vrije Universiteit Amsterdam"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Enrico Daga",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-3184-5407",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "The Open University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Gerry Ryder",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7444-4489",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Aswin Narayanan",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-4473-7886",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Imaging Facility and Centre for Advanced Imaging"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Iryna Kuchma",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2064-3439",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "EIFL / FOSTER / OpenAIRE"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Jose Manzano Patron",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-0040-1926",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Nottingham"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Andrew Mehnert",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8076-7532",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre for Microscopy Characterisation and Analysis and The University of Western Australia"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Matthias Liffers",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-3639-2080",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Australian Research Data Commons"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ronald Siebes",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8772-7904",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving & Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Gerard Coen",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-9915-9721",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving & Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Kathleen Gregory",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-5475-8632",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving & Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Andrea Scharnhorst",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8879-8798",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving & Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Maria Cruz",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-9111-182X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Vrije Universiteit Amsterdam"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Francoise Genova",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-6318-5028",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Centre de Données astronomiques de Strasbourg"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Matthew Kenworthy",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-7064-8270",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Leiden Observatory"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Natalie Meyers",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-6441-6716",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "University of Notre Dame"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Evert Rol",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8357-4453",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Netherlands eScience Center"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Juande Santander-Vela",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2660-510X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "SKA Organisation: Jodrell Bank Observatory"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Joanne Yeomans",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-0738-7661",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Leiden University"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Elli Papadopoulou",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-0893-8509",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Athena Research Center / OpenAIRE"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Emma Lazzeri",
+          "identifiers": [
+            {
+              "identifier": "0000-0003-0506-046X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "National Research Council of Italy / OpenAIRE"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Leonidas Mouchliadis",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7255-9397",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "FORTH-IESL, Laser and Applications Division"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Katerina Lenaki",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-7984-8888",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Greek Ministry of Education, open science enthusiast"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Spyros Zoupanos",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-6069-5241",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "EPFL"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Danail Hristozov",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2386-7366",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Greendecision / GRACIOUS"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Stella Stoycheva",
+          "identifiers": [
+            {
+              "identifier": "0000-0001-8025-565X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Yordas Group / GRACIOUS"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Ellen Leenarts",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-5589-756X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving and Networked Services / OpenAIRE"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Marjan Grootveld",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-2789-322X",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving and Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Frans Huigen",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-9482-7679",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving and Networked Services"
+          }
+        ]
+      },
+      {
+        "person_or_org": {
+          "type": "personal",
+          "name": "Eliane Fankhauser",
+          "identifiers": [
+            {
+              "identifier": "0000-0002-9840-9685",
+              "scheme": "orcid"
+            }
+          ]
+        },
+        "affiliations": [
+          {
+            "name": "Data Archiving and Networked Services"
+          }
+        ]
+      }
+    ],
+    "title": "Top 10 FAIR Data & Software Things",
+    "publisher": "Zenodo",
+    "publication_date": "2019-02-01",
+    "subjects": [
+      {
+        "subject": "FAIR"
+      }
+    ],
+    "languages": [
+      {
+        "id": "eng",
+        "title": {
+          "en": "English"
+        }
+      }
+    ],
+    "identifiers": [
+      {
+        "identifier": "https://github.com/LibraryCarpentry/Top-10-FAIR",
+        "scheme": "url"
+      },
+      {
+        "identifier": "https://librarycarpentry.org/Top-10-FAIR/",
+        "scheme": "url"
+      }
+    ],
+    "rights": [
+      {
+        "id": "cc-by-4.0",
+        "title": {
+          "en": "Creative Commons Attribution 4.0 International"
+        },
+        "description": {
+          "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
+        },
+        "icon": "cc-by-icon",
+        "props": {
+          "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+          "scheme": "spdx"
+        }
+      }
+    ],
+    "description": "<p>The <a href=\"https://librarycarpentry.org/blog/2018/10/top-ten-fair-announcement/\">Top 10 FAIR Data &amp; Software Global Sprint</a> was held online over the course of two-days (29-30 November 2018), where participants from around the world were invited to develop brief guides (stand alone, self-paced training materials), called &ldquo;Things&rdquo;, that can be used by the research community to understand FAIR in different contexts but also as starting points for conversations around FAIR. The idea for &ldquo;Top 10 Data Things&rdquo; stems from <a href=\"https://librarycarpentry.org/Top-10-FAIR/about/(https:/www.ands.org.au/working-with-data/skills/23-research-data-things/10-medical-and-health-things)\">initial work</a> done at the Australian Research Data Commons or ARDC (formerly known as the Australian National Data Service).</p>\n\n<p>The Global Sprint was organised by&nbsp;<a href=\"https://librarycarpentry.org/\">Library Carpentry</a>, <a href=\"https://ardc.edu.au/\">Australian Research Data Commons</a> and the Research Data Alliance <a href=\"https://www.rd-alliance.org/groups/libraries-research-data.html\">Libraries for Research Data Interest Group</a> in collaboration with <a href=\"https://www.fosteropenscience.eu/\">FOSTER Open Science</a>, <a href=\"https://www.openaire.eu/\">OpenAire</a>, <a href=\"https://www.rd-alliance.org/rda-europe\">RDA Europe</a>, <a href=\"http://dmtclearinghouse.esipfed.org/\">Data Management Training Clearinghouse</a>, <a href=\"https://www.cdlib.org/\">California Digital Library</a>, <a href=\"http://datadryad.org/\">Dryad</a>, <a href=\"https://www.aarnet.edu.au/\">AARNet</a>, <a href=\"https://www.library.universiteitleiden.nl/research-and-publishing/centre-for-digital-scholarship\">Center for Digital Scholarship at the Leiden University</a>, and <a href=\"https://dans.knaw.nl/nl\">DANS</a>. Anyone could join the Sprint and roughly 25 groups/individuals participated from The Netherlands, Germany, Australia, United States, Hungary, Norway, Italy, and Belgium. See the full <a href=\"https://docs.google.com/spreadsheets/d/1QQ7Mpxp5ORUE6wheWaC0HXXfiD_G54vVkW1DMMtUM6M/edit?usp=drive_web&amp;ouid=107343664974538994558\">list of registered Sprinters</a>.</p>\n\n<p>Sprinters worked off of a <a href=\"https://docs.google.com/document/d/1TwJyButvAVEz5tCq_bdzD6kdKMvy0wiVLuE3uNbR7Bs/edit\">primer</a> that was provided in advance together with an online ARDC webinar introducing FAIR and the Sprint titled, &ldquo;<a href=\"https://www.slideshare.net/AustralianNationalDataService/ready-set-go-join-the-top-10-fair-data-things-global-sprint\">Ready, Set, Go! Join the Top 10 FAIR Data Things Global Sprint</a>.&rdquo; Groups/individuals developed their Things in Google docs which could be accessed and edited by all participants. The Sprinters also used a <a href=\"https://monash.zoom.us/j/944903353\">Zoom channel</a> provided by ARDC, for online calls and coordination, and a <a href=\"https://gitter.im/LibraryCarpentry/Top10FAIR\">Gitter channel</a>, provided by Library Carpentry, to chat with each other throughout the two-days. In addition, participants used the Twitter hashtag <a href=\"https://twitter.com/search?f=tweets&amp;vertical=default&amp;q=%23Top10FAIR&amp;src=typd\">#Top10FAIR</a> to communicate with the broader community, sometimes including images of the day.</p>\n\n<p>Participants greeted each other throughout the Sprint and created an overall welcoming environment. As the Sprint shifted to different timezones, it was a chance for participants to catch up. The Zoom and Gitter channels were a way for many to connect over FAIR but also discuss other topics. A number of participants did not know what to expect from a Library Carpentry/Carpentries-like event but found a welcoming environment where everyone could participate.</p>\n\n<p>The Top 10 FAIR Data &amp; Software Things <a href=\"https://github.com/LibraryCarpentry/Top-10-FAIR\">repository</a> and <a href=\"https://librarycarpentry.org/Top-10-FAIR/\">website</a> hosts the work of the Sprinters and is meant to be an evolving resource. In May 2019, additional sprinters from the <a href=\"https://librarycarpentry.org/blog/2019/06/may-global-sprint/\">2019 Library Carpentry-Mozilla Global Sprint</a> contributed six new Top 10 FAIR Data &amp; Software Things: Nanotechnology, Astronomy, Linked Open Data, Imaging, Music, and The European Open Science Cloud (EOSC). While sprints are one way to contribute, members of the wider community can submit issues and/or pull requests to the Things to help improve them or add new ones. Published versions of the Things are available via Zenodo and the DOI <a href=\"http://doi.org/10.5281/zenodo.2555498\">http://doi.org/10.5281/zenodo.2555498</a>.</p>"
+  }
+}

@@ -99,7 +99,7 @@ export async function readText(res: Response): Promise<string> {
   const { bytes, more } = await readCapped(res, MAX_BODY_BYTES);
   if (more) {
     throw serviceUnavailable(
-      `Zenodo returned a response body over ${MAX_BODY_BYTES} bytes; it was not read.`,
+      `Zenodo returned a response body over ${MAX_BODY_BYTES.toLocaleString('en-US')} bytes; it was not read.`,
       { status: res.status, retryable: false },
     );
   }

@@ -242,6 +242,21 @@ describe('zenodo_list_files — manifest', () => {
     );
   });
 
+  it('prints the matched total with thousands separators and offsets as call arguments', async () => {
+    serveRecord('22705923', () => withFiles(recordFixture(), 4_018));
+    const page = await runToolContract(listFiles, { id: '22705923', offset: 1_000 });
+    const notice = 'Showing 50 of 4,018; call again with offset 1050.';
+    expect(page.structuredContent).toMatchObject({ matched: 4_018, next_offset: 1_050, notice });
+    const text = page.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain('**Matched:** 4018 | **Offset:** 1000 | **Limit:** 50');
+    expect(text).toContain(notice);
+
+    const past = await call({ id: '22705923', offset: 5_000 });
+    expect(past.enrichment.notice).toBe(
+      'Offset 5000 is past the last of 4,018 files; call again with a lower offset.',
+    );
+  });
+
   it('lists the latest version’s files for a concept id', async () => {
     serveRecord('591564', recordFixture);
     const { result } = await call({ id: '10.5281/zenodo.591564' });
@@ -281,6 +296,172 @@ describe('zenodo_list_files — manifest', () => {
       ['model.bin', false],
       ['COPYING', false],
     ]);
+  });
+});
+
+describe('zenodo_list_files — the 200-entry limit cap', () => {
+  /** A 450-file manifest: data/part-001.csv … data/part-450.csv. */
+  const bigRecord = () => withFiles(recordFixture(), 450);
+  const partKeys = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => `data/part-${String(from + i).padStart(3, '0')}.csv`);
+  const SKLEARN_CONTAINER = '/records/22705923/files/scikit-learn/scikit-learn-1.9.1.zip';
+  const LISTING_CUT =
+    'Zenodo lists at most 1,000 entries of an archive, so some members are missing from this listing; download the archive from archive.download_url for the complete list.';
+
+  it('serves exactly 200 entries at limit 200, with no cap note', async () => {
+    serveRecord('22705923', bigRecord);
+    const { result, enrichment } = await call({ id: '22705923', limit: 200 });
+    expect(result).toMatchObject({
+      offset: 0,
+      limit: 200,
+      matched: 450,
+      has_more: true,
+      next_offset: 200,
+    });
+    expect(result.entries?.map((e) => e.key)).toEqual(partKeys(1, 200));
+    expect(enrichment).toEqual({
+      truncated: true,
+      shown: 200,
+      cap: 200,
+      totalCount: 450,
+      notice: 'Showing 200 of 450; call again with offset 200.',
+    });
+  });
+
+  it('returns every file of a small manifest at limit 201, reporting limit 200 and no cap note', async () => {
+    serveRecord('22917909', csvRecord);
+    const { result, enrichment } = await call({ id: '22917909', limit: 201 });
+    expect(result).toMatchObject({ offset: 0, limit: 200, matched: 9, has_more: false });
+    expect(result.entries).toHaveLength(9);
+    expect(result).not.toHaveProperty('next_offset');
+    expect(enrichment).toEqual({ truncated: false, shown: 9, cap: 200, totalCount: 9 });
+  });
+
+  it('walks a 450-file manifest at limit 500 in pages of 200, each next_offset parsing back at limit 500', async () => {
+    serveRecord('22705923', bigRecord);
+    const note = 'limit 500 is capped at 200 per call';
+
+    const first = await call({ id: '22705923', limit: 500 });
+    expect(first.result).toMatchObject({
+      offset: 0,
+      limit: 200,
+      matched: 450,
+      has_more: true,
+      next_offset: 200,
+    });
+    expect(first.enrichment).toEqual({
+      truncated: true,
+      shown: 200,
+      cap: 200,
+      totalCount: 450,
+      notice: `Showing 200 of 450 (${note}); call again with offset 200.`,
+    });
+
+    const second = await call({ id: '22705923', limit: 500, offset: first.result.next_offset });
+    expect(second.result).toMatchObject({
+      offset: 200,
+      limit: 200,
+      has_more: true,
+      next_offset: 400,
+    });
+    expect(second.enrichment.notice).toBe(
+      `Showing 200 of 450 (${note}); call again with offset 400.`,
+    );
+
+    const last = await call({ id: '22705923', limit: 500, offset: second.result.next_offset });
+    expect(last.result).toMatchObject({ offset: 400, limit: 200, matched: 450, has_more: false });
+    expect(last.result).not.toHaveProperty('next_offset');
+    expect(last.enrichment).toEqual({ truncated: false, shown: 50, cap: 200, totalCount: 450 });
+
+    const keys = [first, second, last].flatMap((p) => (p.result.entries ?? []).map((e) => e.key));
+    expect(keys).toEqual(partKeys(1, 450));
+    expect(fm.calls).toHaveLength(1);
+  });
+
+  it('pages a key_contains match set larger than the cap at the applied limit', async () => {
+    serveRecord('22705923', bigRecord);
+    const { result, enrichment } = await call({
+      id: '22705923',
+      key_contains: 'PART-',
+      offset: 100,
+      limit: 1_000,
+    });
+    expect(result).toMatchObject({
+      key_contains: 'PART-',
+      offset: 100,
+      limit: 200,
+      matched: 450,
+      has_more: true,
+      next_offset: 300,
+    });
+    expect(result.entries?.map((e) => e.key)).toEqual(partKeys(101, 200));
+    expect(enrichment.notice).toBe(
+      'Showing 200 of 450 (limit 1000 is capped at 200 per call); call again with offset 300.',
+    );
+  });
+
+  it('reports an offset past the end at an over-cap limit without the cap note', async () => {
+    serveRecord('22705923', bigRecord);
+    const { result, enrichment } = await call({ id: '22705923', offset: 450, limit: 500 });
+    expect(result).toMatchObject({ offset: 450, limit: 200, matched: 450, has_more: false });
+    expect(result.entries).toEqual([]);
+    expect(enrichment).toEqual({
+      truncated: false,
+      shown: 0,
+      cap: 200,
+      totalCount: 450,
+      notice: 'Offset 450 is past the last of 450 files; call again with a lower offset.',
+    });
+  });
+
+  it('serves the 10,000 ceiling at 200', async () => {
+    serveRecord('22705923', bigRecord);
+    const { result, enrichment } = await call({ id: '22705923', limit: 10_000 });
+    expect(result).toMatchObject({ limit: 200, next_offset: 200 });
+    expect(result.entries).toHaveLength(200);
+    expect(enrichment.notice).toBe(
+      'Showing 200 of 450 (limit 10000 is capped at 200 per call); call again with offset 200.',
+    );
+  });
+
+  it('walks a cut archive listing at an over-cap limit through every member, in pages of 200', async () => {
+    serveRecord('22705923', recordFixture);
+    serveContainer(SKLEARN_CONTAINER, containerBody(857, 143));
+    const pages: Awaited<ReturnType<typeof call>>[] = [];
+    let offset: number | undefined = 0;
+    while (offset !== undefined && pages.length < 10) {
+      const page = await call({ id: '22705923', archive_key: SKLEARN_ZIP, limit: 1_000, offset });
+      pages.push(page);
+      offset = page.result.next_offset;
+    }
+    expect(
+      pages.map((p) => [p.result.offset, p.result.members?.length, p.result.has_more]),
+    ).toEqual([
+      [0, 200, true],
+      [200, 200, true],
+      [400, 200, true],
+      [600, 200, true],
+      [800, 57, false],
+    ]);
+    expect(pages.every((p) => p.result.limit === 200 && p.enrichment.cap === 200)).toBe(true);
+    expect(pages[0]?.enrichment.notice).toBe(
+      `${LISTING_CUT} Showing 200 of 857 (limit 1000 is capped at 200 per call); call again with offset 200.`,
+    );
+    expect(pages[4]?.enrichment).toEqual({
+      truncated: false,
+      shown: 57,
+      cap: 200,
+      totalCount: 857,
+      notice: LISTING_CUT,
+    });
+    const memberPaths = pages.flatMap((p) => (p.result.members ?? []).map((m) => m.path));
+    expect(memberPaths).toEqual(
+      Array.from(
+        { length: 857 },
+        (_, i) => `scikit-learn-1.9.1/sklearn/module_${String(i).padStart(3, '0')}.py`,
+      ),
+    );
+    expect(paths().filter((p) => p.endsWith('/container'))).toHaveLength(1);
   });
 });
 
@@ -741,9 +922,35 @@ describe('zenodo_list_files — runToolContract (production output + enrichment 
     expect((result.content[0] as { text: string }).text).toContain(recovery('record_deleted'));
   });
 
-  it('rejects a limit above 200 at the schema', async () => {
+  it('serves a limit above 200 at 200, carrying the applied limit and the cap note on both surfaces', async () => {
+    serveRecord('22705923', () => withFiles(recordFixture(), 450));
     const result = await runToolContract(listFiles, { id: '22705923', limit: 201 });
+    expect(result.isError).toBeFalsy();
+    const notice =
+      'Showing 200 of 450 (limit 201 is capped at 200 per call); call again with offset 200.';
+    expect(result.structuredContent).toMatchObject({
+      limit: 200,
+      has_more: true,
+      next_offset: 200,
+      truncated: true,
+      shown: 200,
+      cap: 200,
+      totalCount: 450,
+      notice,
+    });
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain(
+      '**Matched:** 450 | **Offset:** 0 | **Limit:** 200 | **Has more:** true | **Next offset:** 200',
+    );
+    expect(text).toContain(notice);
+  });
+
+  it.each([10_001, 0])('rejects limit %i at the schema, before any request', async (limit) => {
+    const result = await runToolContract(listFiles, { id: '22705923', limit });
     expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.InvalidParams },
+    });
     expect(fm.calls).toHaveLength(0);
   });
 });
