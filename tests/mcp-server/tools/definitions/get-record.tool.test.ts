@@ -985,7 +985,8 @@ describe('zenodo_get_record — totals and continuations', () => {
       cursor: cutOf('additional_descriptions').cursor,
     });
     expect(getRecord.output.parse(page)).toEqual(page);
-    expect(enrichment).toEqual({ truncated: false, shown: 2, cap: 5 });
+    // The page ends the list, but both texts on it were cut, so the window is truncated.
+    expect(enrichment).toEqual({ truncated: true, shown: 2, cap: 5 });
     expect(page.window).toEqual({
       field: 'additional_descriptions',
       unit: 'entries',

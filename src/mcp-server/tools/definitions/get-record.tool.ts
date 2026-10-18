@@ -813,7 +813,7 @@ export const getRecord = tool('zenodo_get_record', {
     truncated: z
       .boolean()
       .describe(
-        'Without cursor: true when anything was cut, files past the 25 shown or any field in continuations. With cursor: true when the field continues past this window.',
+        'Without cursor: true when anything was cut, files past the 25 shown or any field in continuations. With cursor: true when continuations lists a next step, because the field continues past this window or an additional description on this page was cut.',
       ),
     shown: z
       .number()
@@ -918,11 +918,7 @@ export const getRecord = tool('zenodo_get_record', {
 
     if (opened) {
       const { window, continuations, size } = opened;
-      ctx.enrich({
-        truncated: window.offset + window.shown < window.total,
-        shown: window.shown,
-        cap: size,
-      });
+      ctx.enrich({ truncated: continuations.length > 0, shown: window.shown, cap: size });
       return {
         found: true,
         input_kind: inputKind,
