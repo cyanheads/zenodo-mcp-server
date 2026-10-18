@@ -7,7 +7,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.1.2-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/zenodo-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.2.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/zenodo-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/zenodo-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.1.2-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/zenodo-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.3.1-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/zenodo-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/zenodo-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.3-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -29,7 +29,7 @@
 
 ## Overview
 
-Datasets, software releases, and publications from Zenodo, CERN's open research repository, over its public REST API. Search deposits with filters for funder, grant, community, license, and file type; resolve any Zenodo DOI, concept DOI, or URL to its record; walk a deposit's versions; and list, open, and preview its files, including members of `.zip` archives. Runs as a stdio process, a local Streamable HTTP server, or the public hosted endpoint above.
+Datasets, software releases, and publications from Zenodo, CERN's open research repository. Search deposits with filters for funder, grant, community, license, and file type; resolve any Zenodo DOI, concept DOI, or URL to its record; walk a deposit's versions; and list, open, and preview its files, including members of `.zip` archives.
 
 ### Tools
 
@@ -51,6 +51,7 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 - `sort`: `bestmatch`, `newest`, `oldest`, `mostviewed`, `mostdownloaded`, `updated-desc`, `updated-asc` (default `bestmatch` with a query, `newest` without)
 - Each hit carries record and concept ids and DOIs, type, version, creators, license ids, access, file totals, and unique views and downloads; `facets` count resource types, access statuses, file types, subjects, and years over the full match set
 - A bare DOI or record URL as `query` fails as `query_is_identifier`; a `community` or `funder` Zenodo doesn't know fails as `unknown_community` / `unknown_funder`
+- A `query` that isn't valid search syntax (`climate AND AND model`, `metadata.title:` with no value, `'single quotes'`, an unclosed `[a TO b]`) fails as `query_syntax`, naming the offending token, whenever a filter other than `community` or `all_versions` is set, because Zenodo would search it as plain text and drop the filters; without such a filter it runs as plain text and the `notice` says so. Parts Zenodo cannot run fail as `query_syntax` with or without a filter, unless the query already runs as plain text: a `/` with no closing `/` (escape a literal one as `\/`), a `!` with nothing after it (`climate!`; escape it as `climate\!`), a range bound ending in a backslash (`[a TO b\]]`; double-quote a bound that holds a space, `]`, or `}`, as in `[a TO "b]"]`), and a boost, fuzziness, or proximity value Zenodo cannot convert (`climate^1.2.3`, `"x y"~0.5`; write `^2`, `~0.5`, `"x y"~2`). A `"` inside a word that never closes (`12" vinyl`; escape it as `12\"`) fails the same way without a filter; with one, the phrase is closed at the end of the query and the closed query is checked instead
 
 ---
 
@@ -58,6 +59,7 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 
 - `id` takes a record id, a Zenodo DOI, a concept DOI or concept record id (resolves to the latest version), another DOI registered to a Zenodo record, or a zenodo.org / doi.org URL; `input_kind` and `resolved_from` report how it resolved
 - Returns the description as plain text (up to 4,000 characters), creators and contributors with ORCIDs and ROR affiliations, rights, access and embargo, funding, related identifiers, communities, version position with `latest_recid`, usage counts, and the first 25 files
+- Every capped field reports its total, and each cut except the file list (paged with `zenodo_list_files`) is listed in `continuations` with a `cursor` and the record `id` it is bound to; pass both back to get that field's next `window` (8,000 characters of text, or the next page of entries)
 - `citation_style`: `bibtex`, `csl-json`, `apa`, `chicago-author-date`, `harvard-cite-them-right`, `ieee`, `modern-language-association`, or `nature`
 - A miss returns `found: false` with `miss_kind` (`not_found`, `deleted`, `restricted`, `not_on_zenodo`) and `guidance`; a deleted record adds its removal `tombstone`
 
@@ -84,7 +86,7 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 ### `zenodo_read_file` <sub>tool</sub>
 
 - `key` from `zenodo_list_files`, plus `archive_member` to read inside a `.zip` without downloading it
-- `max_bytes` 256–65,536 (default 16,384); continue a top-level file from `next_offset`; `.zip` members read from byte 0 only
+- `max_bytes` from 256 (default 16,384), at most 65,536 per call (larger values return 65,536); continue a top-level file from `next_offset`; `.zip` members read from byte 0 only
 - `status` is `text`, `not_text`, `restricted`, or `empty`; excerpts end on a line or character boundary
 - Extensionless files typed `application/octet-stream` (LICENSE, Makefile) are returned only when their content is UTF-8 text
 - Every result carries the deposit's `rights` and the `download_url`
@@ -96,7 +98,7 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 - `vocabulary`: `communities`, `funders`, `awards`, `licenses`, or `resource_types`; `query` by name, acronym, or keyword, or omit it to browse
 - Each entry's `filter_param` and `filter_value` name the `zenodo_search_records` filter and the id to pass it
 - `funder` scopes awards to one funder, as a ROR id, ROR URL, or Crossref Funder DOI
-- Up to 25 entries per page
+- Up to 25 entries per page; only the first 10,000 entries of a list are reachable, reported as `reachable` beside `total`
 
 ## Features
 
