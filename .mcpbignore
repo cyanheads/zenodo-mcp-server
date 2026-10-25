@@ -8,6 +8,13 @@
 /.cache/
 /coverage/
 /tests/
+/src/
+/scripts/
+/docs/
+/.github/
+/.codex/
+/.cursor/
+/.windsurf/
 /Dockerfile
 /bun.lock
 /bunfig.toml
