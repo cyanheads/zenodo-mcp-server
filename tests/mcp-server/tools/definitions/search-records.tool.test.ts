@@ -40,6 +40,7 @@ import {
 const NOW = new Date('2026-09-23T12:00:00Z');
 const SYMBA_UUID = '09369e2d-6fa3-45bc-a92b-64fa8757f144';
 const SEARCH_ALLOWLIST = new Set(['q', 'communities', 'all_versions', 'sort', 'page', 'size']);
+const QUERY_SYNTAX_RECOVERY_MARKDOWN = String.raw`Recovery: Fix the syntax the message names, then call zenodo_search_records again: double-quote or backslash-escape any / \[ \] { } \~ ^ : or ! meant as plain text ("\[CMIP6\]", \\\[CMIP6\\\], 10.5281\\/zenodo.1, climate\\!) and any " inside a regular expression or a word (12\\" vinyl), write phrases in double quotes rather than single, drop a doubled or dangling operator (AND AND, or one with nothing after it inside parentheses, as in (climate AND)), give a field: prefix a value, close a range as \[a TO b\] and double-quote a bound that holds a space, \] or } (\[a TO "b\]"\]), and give a boost or fuzziness one decimal number and a phrase proximity a whole number (^2, \~0.5, "x y"\~2).`;
 
 const recovery = (reason: string) =>
   searchRecords.errors?.find((e) => e.reason === reason)?.recovery as string;
@@ -336,13 +337,15 @@ describe('zenodo_search_records — filters reaching the request', () => {
   ])('rejects an unknown resource type %j (%s) by name, not as a missing field', async (value) => {
     const result = await runToolContract(searchRecords, { resource_type: value });
     expect(result.isError).toBe(true);
-    const text = (result.content[0] as { text: string }).text;
-    expect(text).toContain(
+    const message = z
+      .object({ error: z.object({ message: z.string() }) })
+      .parse(result.structuredContent).error.message;
+    expect(message).toContain(
       'is not a Zenodo resource type id. Look types up with zenodo_lookup_vocabulary (vocabulary: resource_types), or pass one of these ids (a subtype also as <type>::<id>): dataset, event,',
     );
     // The whole id list fits inside the framework's 1,024-character issue-line cut.
-    expect(text).toContain('video, workflow.');
-    expect(text).not.toContain('Missing required field');
+    expect(message).toContain('video, workflow.');
+    expect(message).not.toContain('Missing required field');
     expect(fm.calls).toHaveLength(0);
   });
 
@@ -812,7 +815,7 @@ describe('zenodo_search_records — queries Zenodo cannot parse', () => {
     });
     const text = (result.content[0] as { text: string }).text;
     expect(text).toContain('unexpected "AND" after "climate AND"');
-    expect(text).toContain(recovery('query_syntax'));
+    expect(text).toContain(QUERY_SYNTAX_RECOVERY_MARKDOWN);
     expect(fm.calls).toHaveLength(0);
   });
 
@@ -884,7 +887,7 @@ describe('zenodo_search_records — queries Zenodo cannot parse', () => {
     });
     const text = (result.content[0] as { text: string }).text;
     expect(text).toContain('the boost "^1.2.3" after "climate" is not one decimal number');
-    expect(text).toContain(recovery('query_syntax'));
+    expect(text).toContain(QUERY_SYNTAX_RECOVERY_MARKDOWN);
     expect(fm.calls).toHaveLength(0);
   });
 
@@ -1003,7 +1006,7 @@ describe('zenodo_search_records — queries Zenodo cannot parse', () => {
     });
     const text = (result.content[0] as { text: string }).text;
     expect(text).toContain('the ! after "climate" is a NOT with nothing after it');
-    expect(text).toContain(recovery('query_syntax'));
+    expect(text).toContain(QUERY_SYNTAX_RECOVERY_MARKDOWN);
     expect(fm.calls).toHaveLength(0);
   });
 
