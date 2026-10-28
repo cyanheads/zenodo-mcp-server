@@ -33,6 +33,8 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 
 ### Tools
 
+The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a cited release, resolving funding identities, and checking inspection coverage. Plugin installs include it; MCP clients can discover it through the Skills extension and its skill resources.
+
 | Tool | Description |
 |:---|:---|
 | `zenodo_search_records` | Search deposits by keyword plus type, community, funder, grant, ORCID, file type, license, access, and date filters, with facet counts |
@@ -51,7 +53,10 @@ Datasets, software releases, and publications from Zenodo, CERN's open research 
 - `sort`: `bestmatch`, `newest`, `oldest`, `mostviewed`, `mostdownloaded`, `updated-desc`, `updated-asc` (default `bestmatch` with a query, `newest` without)
 - Each hit carries record and concept ids and DOIs, type, version, creators, license ids, access, file totals, and unique views and downloads; `facets` count resource types, access statuses, file types, subjects, and years over the full match set
 - A bare DOI or record URL as `query` fails as `query_is_identifier`; a `community` or `funder` Zenodo doesn't know fails as `unknown_community` / `unknown_funder`
-- A `query` that isn't valid search syntax (`climate AND AND model`, `metadata.title:` with no value, `'single quotes'`, an unclosed `[a TO b]`) fails as `query_syntax`, naming the offending token, whenever a filter other than `community` or `all_versions` is set, because Zenodo would search it as plain text and drop the filters; without such a filter it runs as plain text and the `notice` says so. Parts Zenodo cannot run fail as `query_syntax` with or without a filter, unless the query already runs as plain text: a `/` with no closing `/` (escape a literal one as `\/`), a `!` with nothing after it (`climate!`; escape it as `climate\!`), a range bound ending in a backslash (`[a TO b\]]`; double-quote a bound that holds a space, `]`, or `}`, as in `[a TO "b]"]`), and a boost, fuzziness, or proximity value Zenodo cannot convert (`climate^1.2.3`, `"x y"~0.5`; write `^2`, `~0.5`, `"x y"~2`). A `"` inside a word that never closes (`12" vinyl`; escape it as `12\"`) fails the same way without a filter; with one, the phrase is closed at the end of the query and the closed query is checked instead
+- Invalid search syntax fails as `query_syntax`, naming the offending token:
+  - With a filter other than `community` or `all_versions` set, any invalid syntax fails (`climate AND AND model`, `metadata.title:` with no value, `'single quotes'`, an unclosed `[a TO b]`), because Zenodo would search it as plain text and drop the filters. Without such a filter it runs as plain text and the `notice` says so
+  - Constructs Zenodo cannot run fail with or without a filter, unless the query already runs as plain text: an unclosed `/` (escape a literal one as `\/`), a trailing `!` (`climate\!`), a range bound ending in a backslash (double-quote a bound holding a space, `]`, or `}`: `[a TO "b]"]`), and a boost, fuzziness, or proximity value Zenodo cannot convert (`climate^1.2.3`, `"x y"~0.5`; write `^2`, `~0.5`, `"x y"~2`)
+  - An unclosed `"` inside a word (`12" vinyl`; escape it as `12\"`) fails without a filter; with one, the phrase is closed at the end of the query and the closed query is checked instead
 
 ---
 
@@ -120,137 +125,32 @@ Agent-friendly output:
 
 ## Getting started
 
-### Public Hosted Instance
-
-A public instance is available at `https://zenodo.caseyjhand.com/mcp` — no installation required. It serves Streamable HTTP; each client takes its own config shape.
-
-For Claude Code:
+Connect to the hosted instance, no install:
 
 ```sh
 claude mcp add --transport http zenodo-mcp-server https://zenodo.caseyjhand.com/mcp
 ```
 
-For Cline (`cline_mcp_settings.json`):
+Or run it locally:
 
-```json
-{
-  "mcpServers": {
-    "zenodo-mcp-server": {
-      "type": "streamableHttp",
-      "url": "https://zenodo.caseyjhand.com/mcp"
-    }
-  }
-}
+```sh
+claude mcp add zenodo-mcp-server -- npx -y @cyanheads/zenodo-mcp-server
 ```
 
-For Cursor (`mcp.json`):
+For other clients, add this to the MCP config file:
 
 ```json
 {
   "mcpServers": {
     "zenodo-mcp-server": {
-      "url": "https://zenodo.caseyjhand.com/mcp"
-    }
-  }
-}
-```
-
-Claude Desktop adds remote servers under Settings → Connectors.
-
-The hosted instance runs without a token, so every caller shares Zenodo's anonymous rate limit. For sustained use, run your own instance with `ZENODO_ACCESS_TOKEN` set.
-
-### Self-Hosted / Local
-
-Add the following to your MCP client configuration file.
-
-```json
-{
-  "mcpServers": {
-    "zenodo-mcp-server": {
-      "type": "stdio",
-      "command": "bunx",
-      "args": ["@cyanheads/zenodo-mcp-server@latest"],
-      "env": {
-        "MCP_TRANSPORT_TYPE": "stdio",
-        "MCP_LOG_LEVEL": "info"
-      }
-    }
-  }
-}
-```
-
-Or with npx (no Bun required):
-
-```json
-{
-  "mcpServers": {
-    "zenodo-mcp-server": {
-      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@cyanheads/zenodo-mcp-server@latest"],
-      "env": {
-        "MCP_TRANSPORT_TYPE": "stdio",
-        "MCP_LOG_LEVEL": "info"
-      }
+      "args": ["-y", "@cyanheads/zenodo-mcp-server"]
     }
   }
 }
 ```
 
-Or with Docker:
-
-```json
-{
-  "mcpServers": {
-    "zenodo-mcp-server": {
-      "type": "stdio",
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "MCP_TRANSPORT_TYPE=stdio", "ghcr.io/cyanheads/zenodo-mcp-server:latest"]
-    }
-  }
-}
-```
-
-To raise the rate limit, add `"ZENODO_ACCESS_TOKEN": "your-token"` to `env` (or `-e ZENODO_ACCESS_TOKEN=…` for Docker). See [Configuration](#configuration).
-
-For Streamable HTTP, set the transport and start the server:
-
-```sh
-MCP_TRANSPORT_TYPE=http MCP_HTTP_PORT=3010 bun run start:http
-# Server listens at http://localhost:3010/mcp
-```
-
-### Prerequisites
-
-- [Bun v1.4.0](https://bun.sh/) or higher (or Node.js v24+).
-- Optional: a [Zenodo personal access token](https://zenodo.org/account/settings/applications/tokens/new/) for a higher rate limit.
-
-### Installation
-
-1. **Clone the repository:**
-
-```sh
-git clone https://github.com/cyanheads/zenodo-mcp-server.git
-```
-
-2. **Navigate into the directory:**
-
-```sh
-cd zenodo-mcp-server
-```
-
-3. **Install dependencies:**
-
-```sh
-bun install
-```
-
-4. **Configure environment:**
-
-```sh
-cp .env.example .env
-# optionally set ZENODO_ACCESS_TOKEN
-```
+The hosted instance shares Zenodo's anonymous rate limit across callers. An optional [Zenodo personal access token](https://zenodo.org/account/settings/applications/tokens/new/) in `ZENODO_ACCESS_TOKEN` raises the rate limit of your own instance (`-e ZENODO_ACCESS_TOKEN=your-token` after the Claude Code server name, or an `env` entry). For Docker or a source build, see [Running the server](#running-the-server).
 
 ## Configuration
 
@@ -280,6 +180,16 @@ The token authenticates as the account that created it, so reads can see what th
 
 ### Local development
 
+Requires [Bun v1.4.0](https://bun.sh/) or higher (or Node.js v24+).
+
+- **Clone and install**:
+
+  ```sh
+  git clone https://github.com/cyanheads/zenodo-mcp-server.git
+  cd zenodo-mcp-server && bun install
+  cp .env.example .env   # optionally set ZENODO_ACCESS_TOKEN
+  ```
+
 - **Build and run the production version**:
 
   ```sh
@@ -301,11 +211,10 @@ The token authenticates as the account that created it, so reads can see what th
 ### Docker
 
 ```sh
-docker build -t zenodo-mcp-server .
-docker run --rm -p 3010:3010 zenodo-mcp-server
+docker run --rm -p 3010:3010 ghcr.io/cyanheads/zenodo-mcp-server:latest
 ```
 
-The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `/var/log/zenodo-mcp-server`. OpenTelemetry peer dependencies are installed by default; build with `--build-arg OTEL_ENABLED=false` to omit them.
+The image defaults to HTTP transport, stateless session mode, and logs to `/var/log/zenodo-mcp-server`. To run it over stdio from an MCP client, use `"command": "docker"` with `"args": ["run", "-i", "--rm", "-e", "MCP_TRANSPORT_TYPE=stdio", "ghcr.io/cyanheads/zenodo-mcp-server:latest"]`. To build locally, `docker build -t zenodo-mcp-server .`; OpenTelemetry peer dependencies are installed by default — build with `--build-arg OTEL_ENABLED=false` to omit them.
 
 ## Project structure
 
@@ -317,6 +226,7 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 | `src/services/zenodo` | Zenodo service: HTTP boundary and pacers, cache, identifier parsing, query building, normalization, text previews. |
 | `tests/` | Unit, service, tool, and fuzz tests against recorded Zenodo fixtures. |
 | `docs/design.md` | Tool surface design, verified upstream behavior, and decisions log. |
+| `skills/zenodo-guide/` | Published research workflow guide and query reference, also served over MCP. |
 
 ## Development guide
 
