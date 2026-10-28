@@ -12,6 +12,7 @@
   "files": [
     "changelog/",
     "dist/",
+    "skills/",
     "!dist/*.mcpb",
     "README.md",
     "LICENSE",
@@ -93,7 +94,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@cyanheads/mcp-ts-core": "^0.13.16",
+    "@cyanheads/mcp-ts-core": "^0.13.18",
     "pino-pretty": "^13.2.0",
     "zod": "^4.6.7"
   },
