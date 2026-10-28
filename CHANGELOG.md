@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.2.0](changelog/0.2.x/0.2.0.md) — 2026-10-28
+
+Publish a Zenodo workflow guide over MCP and refresh framework runtime and desktop packaging.
+
 ## [0.1.4](changelog/0.1.x/0.1.4.md) — 2026-10-25
 
 Framework runtime fixes make tool error text Markdown-safe and startup configuration errors name the invalid variable.
