@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zenodo-mcp-server",
+  "version": "0.1.4",
+  "description": "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files via MCP. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "Casey Hand",
+    "email": "casey@caseyjhand.com",
+    "url": "https://caseyjhand.com"
+  },
+  "homepage": "https://github.com/cyanheads/zenodo-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/zenodo-mcp-server",
+  "license": "Apache-2.0",
+  "keywords": [
+    "zenodo",
+    "cern",
+    "research",
+    "datasets",
+    "doi",
+    "open-access",
+    "open-science",
+    "research-data",
+    "research-software",
+    "citations",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "typescript",
+    "bun",
+    "stdio",
+    "streamable-http",
+    "ai-agent"
+  ]
+}
