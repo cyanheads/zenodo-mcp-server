@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: zenodo-mcp-server
+abstract: "Search and resolve Zenodo datasets, software, and publications by DOI; trace versions and funding, list files, and preview text files via MCP. STDIO or Streamable HTTP."
+type: software
+authors:
+  - family-names: Hand
+    given-names: Casey
+    orcid: "https://orcid.org/0009-0009-3726-568X"
+repository-code: "https://github.com/cyanheads/zenodo-mcp-server"
+license: Apache-2.0
+doi: 10.5281/zenodo.24193053
+keywords:
+  - mcp
+  - model-context-protocol
+  - zenodo
+  - cern
+  - datasets
+  - doi
+  - open-access
+  - open-science
+  - research-data
+  - research-software
+  - citations
