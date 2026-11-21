@@ -18,6 +18,7 @@ describe('desktop bundle agent documentation', () => {
     'node_modules/parent/node_modules/@modelcontextprotocol/server/dist/ext/skills/index.mjs',
     'node_modules/@scope/parent/node_modules/child/dist/skills/index.js',
     'node_modules/child/dist/framework-skills/index.js',
+    'node_modules/@scope/skills/dist/index.js',
     'skills/zenodo-guide/SKILL.md',
   ])('preserves runtime or published content: %s', (entry) => {
     expect(filterAgentDocEntries([entry])).toEqual([]);
@@ -30,6 +31,8 @@ describe('desktop bundle agent documentation', () => {
     'node_modules/parent/node_modules/child/framework-skills/guide/SKILL.md',
     'node_modules/@scope/parent/node_modules/@scope/child/.claude/settings.json',
     'node_modules/child/.agents/skills/guide.md',
+    'node_modules/child/AGENTS.md',
+    'node_modules/parent/node_modules/@scope/child/CLAUDE.md',
     'node_modules/child/SKILL.md',
     'node_modules/child/docs/SKILL.md',
   ])('removes dependency agent documentation: %s', (entry) => {
