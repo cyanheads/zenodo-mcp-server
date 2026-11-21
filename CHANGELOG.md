@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.2.1](changelog/0.2.x/0.2.1.md) — 2026-11-21
+
+Resolve exact DOIs, filter by deposit date, and retrieve study locations from Zenodo records.
+
 ## [0.2.0](changelog/0.2.x/0.2.0.md) — 2026-10-28
 
 Publish a Zenodo workflow guide over MCP and refresh framework runtime and desktop packaging.

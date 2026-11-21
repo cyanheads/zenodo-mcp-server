@@ -1,6 +1,6 @@
 # zenodo-mcp-server - Directory Structure
 
-Generated on: 2026-10-28 07:27:03
+Generated on: 2026-11-21 18:09:03
 
 ```text
 zenodo-mcp-server/
@@ -243,6 +243,7 @@ zenodo-mcp-server/
 ├── bun.lock
 ├── bunfig.toml
 ├── CHANGELOG.md
+├── CITATION.cff
 ├── CLAUDE.md
 ├── devcheck.config.json
 ├── Dockerfile
