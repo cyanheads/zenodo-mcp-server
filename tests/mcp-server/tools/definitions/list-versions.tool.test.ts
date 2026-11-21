@@ -123,6 +123,34 @@ function pageWithLatest(flags: (boolean | undefined)[], total = 47) {
 }
 
 describe('zenodo_list_versions — series listed', () => {
+  it('keeps verbatim timestamps per version and leaves absent values out', async () => {
+    const created = '2020-12-14T19:07:48.437737+00:00';
+    const updated = '2026-06-04T20:17:38.013579+00:00';
+    const hits = [
+      {
+        id: '5',
+        created,
+        updated,
+        metadata: { publication_date: '2018-03-30' },
+        versions: { is_latest: true, index: 2 },
+      },
+      { id: '4', versions: { is_latest: false, index: 1 } },
+    ];
+    serveVersions('5', hitsBody(hits, 2));
+    const result = await runToolContract(listVersions, { id: '5' });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      versions: [{ recid: '5', publication_date: '2018-03-30', created, updated }, { recid: '4' }],
+    });
+    expect(result.structuredContent).not.toHaveProperty('versions.1.created');
+    expect(result.structuredContent).not.toHaveProperty('versions.1.updated');
+    const text = result.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
+    expect(text).toContain(created);
+    expect(text).toContain(updated);
+    expect(text).not.toContain('**Created:** undefined');
+    expect(text).not.toContain('**Updated:** undefined');
+  });
+
   it.each([
     ['22705923', 'record_id'],
     ['10.5281/zenodo.22705923', 'zenodo_doi'],
@@ -371,7 +399,7 @@ describe('zenodo_list_versions — misses (found: false)', () => {
         Array(searches).fill('https://zenodo.org'),
       );
       expect(paths()).toEqual(Array(searches).fill('/api/records'));
-      const guidance = `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or search by title with zenodo_search_records to find a related deposit.`;
+      const guidance = `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or call zenodo_search_records with related_identifier set to this DOI and all_versions: true, or search by title with zenodo_search_records to find a related deposit.`;
       expect(result).toEqual({
         found: false,
         input_kind: 'external_doi',

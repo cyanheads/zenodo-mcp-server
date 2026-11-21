@@ -83,6 +83,22 @@ describe('buildSearch', () => {
     expect(buildSearch({ ...base, publishedTo: '2020-12-31' }).q).toBe(
       'metadata.publication_date:[* TO 2020-12-31]',
     );
+    expect(buildSearch({ ...base, depositedFrom: '2020-12-14' }).q).toBe(
+      'created:[2020-12-14 TO *]',
+    );
+    expect(buildSearch({ ...base, depositedTo: '2020-12-14' }).q).toBe('created:[* TO 2020-12-14]');
+  });
+
+  it('quotes each related identifier before combining its field group with other clauses', () => {
+    const quoted = buildSearch({
+      ...base,
+      query: '(climate OR (model AND ocean))',
+      relatedIdentifiers: ['10.1093/A"B', 'https://doi.org/10.1093/A\\B'],
+      depositedTo: '2020-12-14',
+    }).q;
+    expect(quoted).toBe(
+      String.raw`((climate OR (model AND ocean))) AND metadata.related_identifiers.identifier:("10.1093/A\"B" OR "https://doi.org/10.1093/A\\B") AND created:[* TO 2020-12-14]`,
+    );
   });
 
   it('escapes quotes and backslashes inside quoted values', () => {
@@ -627,6 +643,15 @@ describe('escapeVocabularyQuery', () => {
 });
 
 describe('engineSyntaxError', () => {
+  it('reports runnable regex spans inside words at multiple depths in source order', () => {
+    const query =
+      '(metadata.title:/clim.*/ AND (10.5281/zenodo.4321561 10.5281/zenodo.22705923 OR a/b c/d))';
+    const regexes: string[] = [];
+    expect(querySyntaxError(query)).toBeUndefined();
+    expect(engineSyntaxError(query, (span) => regexes.push(span))).toBeUndefined();
+    expect(regexes).toEqual(['/zenodo.4321561 10.5281/', '/b c/']);
+  });
+
   it.each([
     // A / opens a regex mid-term too; one never closed runs to the end.
     ['climate 10.5281/zenodo.591564', { problem: 'regex', index: 15, token: '/zenodo.591564' }],

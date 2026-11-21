@@ -19,7 +19,49 @@ import {
   parseFunderRef,
   parseRecordRef,
   recordUrl,
+  relatedIdentifierValues,
 } from '@/services/zenodo/identifiers.js';
+
+describe('relatedIdentifierValues', () => {
+  it('folds ASCII letters without inventing a different non-ASCII DOI', () => {
+    expect(relatedIdentifierValues('10.1234/ÄBC')).toEqual([
+      '10.1234/ÄBC',
+      'https://doi.org/10.1234/ÄBC',
+      '10.1234/Äbc',
+      'https://doi.org/10.1234/Äbc',
+    ]);
+  });
+  it('keeps the exact DOI spelling and appends deduplicated HTTPS and lowercase forms', () => {
+    expect(relatedIdentifierValues(' 10.1016/J.JTBI.2008.04.005 ')).toEqual([
+      '10.1016/J.JTBI.2008.04.005',
+      'https://doi.org/10.1016/J.JTBI.2008.04.005',
+      '10.1016/j.jtbi.2008.04.005',
+      'https://doi.org/10.1016/j.jtbi.2008.04.005',
+    ]);
+    expect(relatedIdentifierValues('https://doi.org/10.5281/zenodo.10363958')).toEqual([
+      'https://doi.org/10.5281/zenodo.10363958',
+      '10.5281/zenodo.10363958',
+    ]);
+  });
+
+  it('keeps the supplied DOI URL and decodes its path for the bare DOI', () => {
+    expect(
+      relatedIdentifierValues('http://dx.doi.org/10.1093%2fBIOINFORMATICS%2fBTAB843?utm_source=x'),
+    ).toEqual([
+      'http://dx.doi.org/10.1093%2fBIOINFORMATICS%2fBTAB843?utm_source=x',
+      '10.1093/BIOINFORMATICS/BTAB843',
+      'https://doi.org/10.1093/BIOINFORMATICS/BTAB843',
+      '10.1093/bioinformatics/btab843',
+      'https://doi.org/10.1093/bioinformatics/btab843',
+    ]);
+  });
+
+  it('preserves a non-DOI URL verbatim after trimming', () => {
+    expect(relatedIdentifierValues('  HTTPS://example.org/Some/Path?q=A%2fB#Heading  ')).toEqual([
+      'HTTPS://example.org/Some/Path?q=A%2fB#Heading',
+    ]);
+  });
+});
 
 describe('parseRecordRef — accepted forms', () => {
   it.each([

@@ -10,7 +10,12 @@
 
 import { type Context, tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-import { decodeCursor, encodeCursor } from '@cyanheads/mcp-ts-core/utils';
+import {
+  decodeCursor,
+  encodeCursor,
+  escapeMarkdownInline,
+  markdown,
+} from '@cyanheads/mcp-ts-core/utils';
 import { parseRecordRef, recordUrl } from '@/services/zenodo/identifiers.js';
 import type { ZenodoRecord } from '@/services/zenodo/types.js';
 import { getZenodoService } from '@/services/zenodo/zenodo-service.js';
@@ -48,6 +53,8 @@ const LIST_FIELDS = [
   'funding',
   'related_identifiers',
   'communities',
+  'dates',
+  'locations',
 ] as const;
 type ListField = (typeof LIST_FIELDS)[number];
 
@@ -143,6 +150,36 @@ const CommunitySchema = z
   })
   .describe('One community.');
 
+const DateSchema = z
+  .object({
+    date: z.string().describe('Depositor-supplied date or range, as given.'),
+    type: z.string().optional().describe('Zenodo date type id, e.g. collected, when supplied.'),
+    description: z
+      .string()
+      .optional()
+      .describe('Depositor description of the date, when supplied.'),
+  })
+  .describe('One depositor-supplied date or date range.');
+
+const LocationSchema = z
+  .object({
+    place: z.string().optional().describe('Depositor-supplied place name, when supplied.'),
+    description: z
+      .string()
+      .optional()
+      .describe('Depositor description of the location, when supplied.'),
+    geometry: z
+      .object({
+        type: z.string().describe('GeoJSON geometry type, e.g. Point or GeometryCollection.'),
+      })
+      .catchall(z.json())
+      .optional()
+      .describe(
+        'Complete GeoJSON geometry, including coordinates or nested geometries, when supplied.',
+      ),
+  })
+  .describe('One depositor-supplied location.');
+
 const RecordSchema = z
   .object({
     recid: z.string().describe('Record id of this version.'),
@@ -166,6 +203,18 @@ const RecordSchema = z
       .optional()
       .describe(
         'Publication date (EDTF as given: 2026-09-11, 2020, 2020-05); absent when not recorded.',
+      ),
+    created: z
+      .string()
+      .optional()
+      .describe(
+        'When Zenodo created the record, ISO 8601 as given. Embargo release timing is separate. Absent when not reported.',
+      ),
+    updated: z
+      .string()
+      .optional()
+      .describe(
+        'When Zenodo last updated the record, ISO 8601 as given. Absent when not reported.',
       ),
     version: z
       .string()
@@ -249,6 +298,26 @@ const RecordSchema = z
       .describe('Source code repository URL; absent when none is linked.'),
     communities: z.array(CommunitySchema).describe('First 25 communities holding this record.'),
     community_count: z.number().describe('Total communities holding this record.'),
+    dates: z
+      .array(DateSchema)
+      .optional()
+      .describe(
+        'First 50 depositor-supplied dates or ranges in record order. Absent when none are supplied.',
+      ),
+    date_count: z
+      .number()
+      .optional()
+      .describe('Total depositor-supplied dates or ranges. Present with dates.'),
+    locations: z
+      .array(LocationSchema)
+      .optional()
+      .describe(
+        'First 50 depositor-supplied locations in record order. Absent when none are supplied.',
+      ),
+    location_count: z
+      .number()
+      .optional()
+      .describe('Total depositor-supplied locations. Present with locations.'),
     versions: z
       .object({
         index: z
@@ -388,6 +457,18 @@ const WindowSchema = z
       .array(CommunitySchema)
       .optional()
       .describe('Up to 25 communities starting at offset. Present when field is communities.'),
+    dates: z
+      .array(DateSchema)
+      .optional()
+      .describe(
+        'Up to 50 depositor-supplied dates starting at offset. Present when field is dates.',
+      ),
+    locations: z
+      .array(LocationSchema)
+      .optional()
+      .describe(
+        'Up to 50 depositor-supplied locations starting at offset. Present when field is locations.',
+      ),
   })
   .describe('One window of a field a previous response cut short.');
 
@@ -461,6 +542,10 @@ function listPage(
       }));
     case 'communities':
       return page(record.communities, COMMUNITIES_CAP, (communities) => ({ communities }));
+    case 'dates':
+      return page(record.dates, LIST_CAP, (dates) => ({ dates }));
+    case 'locations':
+      return page(record.locations, LIST_CAP, (locations) => ({ locations }));
   }
 }
 
@@ -600,6 +685,8 @@ function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): Re
     ...(record.oai_id ? { oai_id: record.oai_id } : {}),
     title: record.title,
     ...(record.publication_date ? { publication_date: record.publication_date } : {}),
+    ...(record.created ? { created: record.created } : {}),
+    ...(record.updated ? { updated: record.updated } : {}),
     ...(record.version ? { version: record.version } : {}),
     ...(record.publisher ? { publisher: record.publisher } : {}),
     ...(record.resource_type ? { resource_type: record.resource_type } : {}),
@@ -629,6 +716,12 @@ function toRecordView(record: ZenodoRecord, latestRecid: string | undefined): Re
     ...(record.code_repository ? { code_repository: record.code_repository } : {}),
     communities: record.communities.slice(0, COMMUNITIES_CAP),
     community_count: record.communities.length,
+    ...(record.dates.length
+      ? { dates: record.dates.slice(0, LIST_CAP), date_count: record.dates.length }
+      : {}),
+    ...(record.locations.length
+      ? { locations: record.locations.slice(0, LIST_CAP), location_count: record.locations.length }
+      : {}),
     versions: { ...record.versions, ...(latestRecid ? { latest_recid: latestRecid } : {}) },
     ...(record.stats ? { stats: record.stats } : {}),
     files: {
@@ -722,6 +815,26 @@ function renderContinuations(continuations: Continuation[]): string[] {
   ];
 }
 
+function renderDate(date: z.infer<typeof DateSchema>): string {
+  return `- ${escapeMarkdownInline(date.date)}${date.type ? ` (${escapeMarkdownInline(date.type)})` : ''}${date.description ? ` — ${escapeMarkdownInline(date.description)}` : ''}`;
+}
+
+function renderLocation(location: z.infer<typeof LocationSchema>): string[] {
+  const lines = [''];
+  if (location.place) lines.push(`**Place:** ${escapeMarkdownInline(location.place)}`);
+  if (location.description) {
+    lines.push(`**Description:** ${escapeMarkdownInline(location.description)}`);
+  }
+  if (location.geometry) {
+    lines.push(
+      markdown()
+        .codeBlock(JSON.stringify(location.geometry, null, 2), 'json')
+        .build(),
+    );
+  }
+  return lines;
+}
+
 function renderWindow(w: Window): string[] {
   const lines = [
     '',
@@ -739,13 +852,15 @@ function renderWindow(w: Window): string[] {
   if (w.funding) lines.push(...w.funding.flatMap(renderFunding));
   if (w.related_identifiers) lines.push(...w.related_identifiers.map(renderRelated));
   if (w.communities) lines.push(`**Communities:** ${renderCommunities(w.communities)}`);
+  if (w.dates) lines.push(...w.dates.map(renderDate));
+  if (w.locations) lines.push(...w.locations.flatMap(renderLocation));
   return lines;
 }
 
 export const getRecord = tool('zenodo_get_record', {
   title: 'Get a Zenodo record',
   description:
-    'Resolve one Zenodo deposit from a record id, a Zenodo DOI (10.5281/zenodo.N), a concept DOI or concept record id (resolves to the latest version), another DOI deposited on Zenodo, or a zenodo.org or doi.org URL, and return its full metadata: description, creators with ORCIDs and ROR affiliations, license, access and embargo, funding and grants, related identifiers, communities, version position, usage counts, and the first 25 files. Optionally includes a formatted citation. Long text and lists are cut at display caps with their totals reported; every cut except the file list (paged with zenodo_list_files) is listed in continuations with a cursor and the record id it is bound to, and passing both back returns the next window of that field (8,000 characters of text, or the next page of entries) in place of the record. A miss (an unknown id, a deleted record with its removal tombstone, restricted metadata, or a DOI not registered on Zenodo) returns found: false with guidance instead of an error.',
+    'Resolve one Zenodo deposit from a record id, a Zenodo DOI (10.5281/zenodo.N), a concept DOI or concept record id (resolves to the latest version), another DOI deposited on Zenodo, or a zenodo.org or doi.org URL, and return its full metadata: description, creators with ORCIDs and ROR affiliations, license, access and embargo, funding and grants, related identifiers, communities, depositor-supplied dates and locations, record timestamps, version position, usage counts, and the first 25 files. Optionally includes a formatted citation. Long text and lists are cut at display caps with their totals reported; every cut except the file list (paged with zenodo_list_files) is listed in continuations with a cursor and the record id it is bound to, and passing both back returns the next window of that field (8,000 characters of text, or the next page of entries) in place of the record. A miss (an unknown id, a deleted record with its removal tombstone, restricted metadata, or a DOI not registered on Zenodo) returns found: false with guidance instead of an error.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     id: z
@@ -991,6 +1106,8 @@ export const getRecord = tool('zenodo_get_record', {
           ? `**Type:** ${r.resource_type.title ? `${inline(r.resource_type.title)} ` : ''}(${inline(r.resource_type.id)})`
           : undefined,
         r.publication_date ? `**Published:** ${inline(r.publication_date)}` : undefined,
+        r.created ? `**Created:** ${escapeMarkdownInline(r.created)}` : undefined,
+        r.updated ? `**Updated:** ${escapeMarkdownInline(r.updated)}` : undefined,
         r.version ? `**Version:** ${inline(r.version)}` : undefined,
         r.publisher ? `**Publisher:** ${inline(r.publisher)}` : undefined,
         r.revision !== undefined ? `**Revision:** ${r.revision}` : undefined,
@@ -1036,6 +1153,16 @@ export const getRecord = tool('zenodo_get_record', {
       }
       if (r.communities.length || r.community_count) {
         lines.push(`**Communities (${r.community_count}):** ${renderCommunities(r.communities)}`);
+      }
+      if (r.dates) {
+        lines.push('', `### Dates (${r.date_count})`, ...r.dates.map(renderDate));
+      }
+      if (r.locations) {
+        lines.push(
+          '',
+          `### Locations (${r.location_count})`,
+          ...r.locations.flatMap(renderLocation),
+        );
       }
 
       if (r.funding.length || r.funding_count) {

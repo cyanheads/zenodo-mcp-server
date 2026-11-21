@@ -1,8 +1,7 @@
 /**
  * @fileoverview zenodo_search_records — keyword search over Zenodo deposits with
- * verified filters (resource type, community, funder, award, creator ORCID, file
- * type, license, access status, publication date), returning manifest-free
- * summaries plus facet counts over the full match set, every filter applied.
+ * verified filters, including publication and deposit dates and related identifiers.
+ * Returns manifest-free summaries and facets over the full filtered match set.
  * @module mcp-server/tools/definitions/search-records
  */
 
@@ -16,6 +15,7 @@ import {
   parseAwardRef,
   parseCommunityRef,
   parseFunderRef,
+  relatedIdentifierValues,
 } from '@/services/zenodo/identifiers.js';
 import {
   ACCESS_STATUSES,
@@ -55,6 +55,9 @@ const Q_FILTERS = [
   'access_status',
   'published_from',
   'published_to',
+  'deposited_from',
+  'deposited_to',
+  'related_identifier',
 ] as const;
 
 /** `s` cut to `max` characters, marking the cut end with `…`. */
@@ -135,11 +138,15 @@ function engineFailure(
   sent: string,
   filtered: boolean,
   syntaxError: QuerySyntaxError | undefined,
+  onMidWordRegex: (span: string) => void,
 ): { error: QuerySyntaxError; query: string } | undefined {
-  const written = query ? engineSyntaxError(query) : undefined;
+  const written = query
+    ? engineSyntaxError(query, query === sent && !syntaxError ? onMidWordRegex : undefined)
+    : undefined;
   if (!filtered) return written && !syntaxError ? { error: written, query } : undefined;
   if (written && (written.problem === 'regex' || syntaxError)) return { error: written, query };
-  const balanced = syntaxError ? undefined : engineSyntaxError(sent);
+  if (syntaxError) return undefined;
+  const balanced = sent === query ? written : engineSyntaxError(sent, onMidWordRegex);
   if (!balanced) return undefined;
   return written ? { error: written, query } : { error: balanced, query: sent };
 }
@@ -230,6 +237,14 @@ const HitSchema = z
       .describe(
         'Publication date (EDTF as given: 2026-09-11, 2020, 2020-05); absent when not recorded.',
       ),
+    created: z
+      .string()
+      .optional()
+      .describe('Zenodo record creation timestamp (ISO 8601); absent if Zenodo omits it.'),
+    updated: z
+      .string()
+      .optional()
+      .describe('Zenodo record last-update timestamp (ISO 8601); absent if Zenodo omits it.'),
     resource_type: z
       .object({
         id: z.string().describe('Resource type id, e.g. dataset or publication-article.'),
@@ -309,13 +324,13 @@ const HitSchema = z
 export const searchRecords = tool('zenodo_search_records', {
   title: 'Search Zenodo records',
   description:
-    'Search Zenodo\'s open research repository — datasets, software releases, publications, and other deposits — by keyword query plus filters for resource type, community, funder, grant, creator ORCID, file type, license, access status, and publication date. Returns one summary per deposit (ids, DOIs, title, type, version, creators, license, access, file totals, usage counts) plus facet counts over the full match set, every filter applied. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.',
+    'Search Zenodo\'s open research repository — datasets, software releases, publications, and other deposits — by query and filters, including publication date, deposit date, and related identifier. Use related_identifier to find deposits linked to a paper DOI or URL. Returns one summary per deposit plus facet counts over the full match set with every filter applied. Query terms are OR-ed unless joined with AND, quoted phrases match exactly, and field syntax works on record fields (metadata.title:"…", metadata.subjects.subject:"…"). Only the latest version of each deposit is searched unless all_versions is true, and only the first 10,000 matches are reachable by paging. Resolve community, funder, and grant names to ids with zenodo_lookup_vocabulary first; open one deposit in full with zenodo_get_record.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     query: z
       .preprocess(blankToUndefined, z.string().max(1000).optional())
       .describe(
-        'Keyword query. Terms are OR-ed unless joined with AND; "quoted phrases" (double quotes) match exactly; field syntax such as metadata.title:"…" or doi:"10.5281/zenodo.N" works. Escape a literal / as \\/. A bare DOI or record URL is rejected; open it with zenodo_get_record instead. With any filter other than community and all_versions, a query that is not valid search syntax (AND AND, a field: with no value, an unclosed [a TO b]) is rejected; without one, Zenodo matches it as plain text. Omit to browse with filters only.',
+        'Keyword query. Terms are OR-ed unless joined with AND; double quotes search phrases; field syntax such as metadata.title:"…" works. For DOI-field search, use one quoted clause per DOI (doi:"10.5281/zenodo.N") and compare the returned DOIs. Resolve an exact DOI or record URL with zenodo_get_record. Zenodo can read an unescaped / inside a word as the start of a regex; escape a literal / as \\/. With any filter other than community and all_versions, an unparseable query (AND AND, a field: with no value, an unclosed [a TO b]) is rejected; without one, Zenodo matches it as plain text. Omit to browse with filters only.',
       ),
     resource_type: resourceTypeInput.describe(
       'Resource type ids, OR-ed (a single string is accepted): dataset, software, publication, publication-article, image-photo, … Any case; a subtype may also be written in the <type>::<id> form zenodo_lookup_vocabulary shows as its search value (publication::publication-article). A top-level type includes its subtypes. Look ids up with zenodo_lookup_vocabulary (vocabulary: resource_types).',
@@ -380,11 +395,22 @@ export const searchRecords = tool('zenodo_search_records', {
         'Access status: open, restricted, embargoed, or metadata-only. Case, spaces, hyphens, and underscores are ignored when matching (Metadata Only reads as metadata-only).',
       ),
     published_from: dateField(
-      'Earliest publication date, YYYY, YYYY-MM, or YYYY-MM-DD; a partial date starts at its first day.',
+      'Earliest depositor-provided publication date (metadata.publication_date), YYYY, YYYY-MM, or YYYY-MM-DD; a partial date starts at its first day.',
     ),
     published_to: dateField(
-      'Latest publication date, YYYY, YYYY-MM, or YYYY-MM-DD; a partial date ends at its last day.',
+      'Latest depositor-provided publication date (metadata.publication_date), YYYY, YYYY-MM, or YYYY-MM-DD; a partial date ends at its last day.',
     ),
+    deposited_from: dateField(
+      'Earliest UTC date Zenodo created the record (created), YYYY, YYYY-MM, or YYYY-MM-DD; a partial date starts at its first day. Record creation can precede public access.',
+    ),
+    deposited_to: dateField(
+      'Latest UTC date Zenodo created the record (created), YYYY, YYYY-MM, or YYYY-MM-DD; includes the full last day of a partial date.',
+    ),
+    related_identifier: z
+      .preprocess(blankToUndefined, z.string().max(500).optional())
+      .describe(
+        'Match any related identifier, across relation types. Accepts a bare DOI, doi:-prefixed DOI, doi.org DOI URL, or another HTTP(S) URL. DOI forms are matched as given and with bare and HTTPS doi.org forms in supplied and lowercase casing; other URLs match exactly. URLs are never fetched.',
+      ),
     all_versions: z
       .boolean()
       .default(false)
@@ -392,7 +418,7 @@ export const searchRecords = tool('zenodo_search_records', {
     sort: z
       .preprocess(enumPreprocess(SEARCH_SORTS), z.enum(SEARCH_SORTS).optional())
       .describe(
-        'Sort order: bestmatch, newest, oldest, mostviewed, mostdownloaded, updated-desc, updated-asc. Case, spaces, hyphens, and underscores are ignored when matching (MostViewed reads as mostviewed). Defaults to bestmatch with a query, newest without.',
+        'Sort order: bestmatch, newest and oldest (record created), mostviewed, mostdownloaded, updated-desc and updated-asc (record updated). Case, spaces, hyphens, and underscores are ignored when matching (MostViewed reads as mostviewed). Defaults to bestmatch with a query, newest without.',
       ),
     page: z
       .number()
@@ -469,7 +495,7 @@ export const searchRecords = tool('zenodo_search_records', {
       .string()
       .optional()
       .describe(
-        'Guidance on a query Zenodo matched as plain text, empty results, the 10,000-result window, the 25-per-call size cap, or further pages.',
+        'Guidance on plain-text fallback or a regular expression opened inside a word, empty results, the 10,000-result window, the 25-per-call size cap, or further pages.',
       ),
   },
   errors: [
@@ -519,18 +545,25 @@ export const searchRecords = tool('zenodo_search_records', {
         'Resolve the funder with zenodo_lookup_vocabulary (vocabulary: funders) and pass the returned ROR id as funder.',
     },
     {
+      reason: 'invalid_related_identifier',
+      code: JsonRpcErrorCode.ValidationError,
+      when: 'related_identifier is neither a DOI nor a valid HTTP(S) URL without credentials',
+      recovery:
+        'Use a bare DOI such as 10.1093/bioinformatics/btab843, a doi:-prefixed DOI, or an HTTP(S) URL.',
+    },
+    {
       reason: 'invalid_date_range',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'The expanded published_from is after published_to',
+      when: 'An expanded lower date bound is after its upper bound',
       recovery:
-        'Set published_from to a date on or before published_to and call zenodo_search_records again.',
+        'Set published_from on or before published_to, and deposited_from on or before deposited_to.',
     },
     {
       reason: 'result_window_exceeded',
       code: JsonRpcErrorCode.ValidationError,
       when: 'The page starts past the first 10,000 matches: (page − 1) × size is 10,000 or more, counting a size above 25 as 25',
       recovery:
-        'Zenodo serves only the first 10,000 matches; add filters or a published_from/published_to range to zenodo_search_records instead of paging deeper.',
+        'Zenodo serves only the first 10,000 matches; narrow the search with filters, published_from/published_to, or deposited_from/deposited_to.',
     },
     {
       reason: 'rate_limited',
@@ -566,7 +599,10 @@ export const searchRecords = tool('zenodo_search_records', {
     const filtered = Q_FILTERS.some((name) => input[name] !== undefined);
     const sentQuery = queryAsSent(input.query, filtered);
     const syntaxError = sentQuery ? querySyntaxError(sentQuery) : undefined;
-    const engine = engineFailure(input.query ?? '', sentQuery, filtered, syntaxError);
+    const midWordRegexes: string[] = [];
+    const engine = engineFailure(input.query ?? '', sentQuery, filtered, syntaxError, (span) =>
+      midWordRegexes.push(span),
+    );
     if (engine) {
       throw ctx.fail(
         'query_syntax',
@@ -584,16 +620,25 @@ export const searchRecords = tool('zenodo_search_records', {
       );
     }
 
-    const publishedFrom = input.published_from
-      ? expandPartialDate(input.published_from, 'from')
+    const range = (kind: 'published' | 'deposited') => {
+      const from = input[`${kind}_from`];
+      const to = input[`${kind}_to`];
+      const lower = from ? expandPartialDate(from, 'from') : undefined;
+      const upper = to ? expandPartialDate(to, 'to') : undefined;
+      if (lower && upper && lower > upper) {
+        throw ctx.fail('invalid_date_range', `${kind}_from ${lower} is after ${kind}_to ${upper}.`);
+      }
+      return { lower, upper };
+    };
+    const published = range('published');
+    const deposited = range('deposited');
+    const related = input.related_identifier
+      ? relatedIdentifierValues(input.related_identifier)
       : undefined;
-    const publishedTo = input.published_to
-      ? expandPartialDate(input.published_to, 'to')
-      : undefined;
-    if (publishedFrom && publishedTo && publishedFrom > publishedTo) {
+    if (input.related_identifier && !related) {
       throw ctx.fail(
-        'invalid_date_range',
-        `published_from ${publishedFrom} is after published_to ${publishedTo}.`,
+        'invalid_related_identifier',
+        'related_identifier must be a DOI or an HTTP(S) URL without credentials.',
       );
     }
 
@@ -639,8 +684,11 @@ export const searchRecords = tool('zenodo_search_records', {
       ...(input.award ? { award: parseAwardRef(input.award) } : {}),
       ...(input.creator_orcid ? { creatorOrcid: input.creator_orcid } : {}),
       ...(input.license ? { license: input.license } : {}),
-      ...(publishedFrom ? { publishedFrom } : {}),
-      ...(publishedTo ? { publishedTo } : {}),
+      ...(published.lower ? { publishedFrom: published.lower } : {}),
+      ...(published.upper ? { publishedTo: published.upper } : {}),
+      ...(deposited.lower ? { depositedFrom: deposited.lower } : {}),
+      ...(deposited.upper ? { depositedTo: deposited.upper } : {}),
+      ...(related ? { relatedIdentifiers: related } : {}),
     };
     const result = await service.searchRecords(filters, ctx);
 
@@ -655,6 +703,11 @@ export const searchRecords = tool('zenodo_search_records', {
     if (syntaxError) {
       notice.push(
         `Zenodo could not parse the query (${describeSyntaxError(sentQuery, syntaxError)}), so it matched the query's words as plain text and ignored its operators, quotes, and field syntax.`,
+      );
+    }
+    if (midWordRegexes.length) {
+      notice.push(
+        `Zenodo read ${midWordRegexes.map((span) => JSON.stringify(span)).join(', ')} as regular expression syntax opened inside a word. To search the DOI field, use one quoted clause per DOI, for example doi:"10.5281/zenodo.4321561" OR doi:"10.5281/zenodo.22705923", and compare the returned DOIs. For exact DOI resolution use zenodo_get_record. Escape a literal / as \\/.`,
       );
     }
     if (total === 0) {
@@ -702,6 +755,9 @@ export const searchRecords = tool('zenodo_search_records', {
       }
       if (input.published_from || input.published_to) {
         notice.push('Widen or drop published_from/published_to.');
+      }
+      if (input.deposited_from || input.deposited_to) {
+        notice.push('Widen or drop deposited_from/deposited_to.');
       }
     } else if (result.hits.length === 0) {
       const last = Math.max(1, Math.ceil(reachable / size));
@@ -758,6 +814,8 @@ export const searchRecords = tool('zenodo_search_records', {
           ? `**Type:** ${h.resource_type.title ? `${inline(h.resource_type.title)} ` : ''}(${inline(h.resource_type.id)})`
           : undefined,
         h.publication_date ? `**Published:** ${inline(h.publication_date)}` : undefined,
+        h.created !== undefined ? `**Created:** ${inline(h.created)}` : undefined,
+        h.updated !== undefined ? `**Updated:** ${inline(h.updated)}` : undefined,
         h.version ? `**Version:** ${inline(h.version)}` : undefined,
         h.version_index !== undefined ? `**Version index:** ${h.version_index}` : undefined,
         h.is_latest !== undefined ? `**Latest:** ${h.is_latest}` : undefined,

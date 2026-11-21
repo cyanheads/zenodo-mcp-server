@@ -34,6 +34,9 @@ export interface SearchFilters {
   /** Canonical community UUID. */
   communityId?: string;
   creatorOrcid?: string;
+  /** Expanded UTC calendar days, `YYYY-MM-DD`. */
+  depositedFrom?: string;
+  depositedTo?: string;
   fileTypes?: string[];
   /** Funder ROR id. */
   funderRor?: string;
@@ -44,6 +47,8 @@ export interface SearchFilters {
   /** Expanded full date, `YYYY-MM-DD`. */
   publishedTo?: string;
   query?: string;
+  /** Exact variants of a related identifier. */
+  relatedIdentifiers?: string[];
   /** Resource type ids (`dataset`, `publication-article`), OR-ed. */
   resourceTypes?: string[];
   size: number;
@@ -525,6 +530,11 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
     );
   }
   if (filters.license) clauses.push(`metadata.rights.id:${quoteValue(filters.license)}`);
+  if (filters.relatedIdentifiers?.length) {
+    clauses.push(
+      `metadata.related_identifiers.identifier:${anyOf(filters.relatedIdentifiers.map(quoteValue))}`,
+    );
+  }
   if (filters.resourceTypes?.length)
     clauses.push(anyOf(filters.resourceTypes.map(resourceTypeClause)));
   if (filters.fileTypes?.length) {
@@ -535,6 +545,9 @@ export function buildSearch(filters: SearchFilters): BuiltSearch {
     clauses.push(
       `metadata.publication_date:[${filters.publishedFrom ?? '*'} TO ${filters.publishedTo ?? '*'}]`,
     );
+  }
+  if (filters.depositedFrom || filters.depositedTo) {
+    clauses.push(`created:[${filters.depositedFrom ?? '*'} TO ${filters.depositedTo ?? '*'}]`);
   }
 
   const query = queryAsSent(filters.query, clauses.length > 0);
@@ -675,8 +688,14 @@ function luqumLeavesPhraseOpenAt(q: string, at: number): boolean {
  *   unescape ({@link rangeSpan}; `[a TO b\]]`, `[a\ b TO c]`, HTTP 500);
  * - `dangling_not`: a `!`, which the engine reads as NOT inside a word too, with
  *   nothing after it but a `)` or the end (`climate!`, `(climate!) model`, HTTP 500).
+ *
+ * When given, `onMidWordRegex` receives runnable regex spans opened inside a
+ * luqum word. Pass it only after confirming that luqum accepts the query.
  */
-export function engineSyntaxError(query: string): QuerySyntaxError | undefined {
+export function engineSyntaxError(
+  query: string,
+  onMidWordRegex?: (span: string) => void,
+): QuerySyntaxError | undefined {
   const spans: [start: number, end: number][] = [];
   let depth = 0;
   let unmatched = false;
@@ -716,13 +735,19 @@ export function engineSyntaxError(query: string): QuerySyntaxError | undefined {
       i = span.end - 1;
     }
   }
-  if ((!unmatched && depth === 0) || querySyntaxError(query)) return undefined;
-  const luqumStarts = new Set<number>();
-  for (let tok = nextToken(query, 0); tok.kind !== 'EOF'; tok = nextToken(query, tok.end)) {
-    if (tok.kind === 'PHRASE' || tok.kind === 'REGEX') luqumStarts.add(tok.start);
+  const unbalanced = unmatched || depth !== 0;
+  if (unbalanced ? querySyntaxError(query) : !onMidWordRegex) return undefined;
+  let tok = nextToken(query, 0);
+  for (const [start, end] of spans) {
+    while (tok.end <= start && tok.kind !== 'EOF') tok = nextToken(query, tok.end);
+    const sameStart = tok.start === start && (tok.kind === 'PHRASE' || tok.kind === 'REGEX');
+    if (unbalanced && !sameStart)
+      return { problem: 'word_span', index: start, token: query.slice(start, end) };
+    if (tok.kind === 'TERM' && tok.start < start && query[start] === '/') {
+      onMidWordRegex?.(query.slice(start, end));
+    }
   }
-  const moved = spans.find(([start]) => !luqumStarts.has(start));
-  return moved && { problem: 'word_span', index: moved[0], token: query.slice(...moved) };
+  return undefined;
 }
 
 const PARTIAL_DATE = /^(\d{4})(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?)?$/;

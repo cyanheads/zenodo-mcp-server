@@ -49,7 +49,7 @@ export const listFiles = tool('zenodo_list_files', {
     archive_key: z
       .preprocess(blankToUndefined, z.string().max(1000).optional())
       .describe(
-        'Exact file key of a .zip in this record (from the manifest) to list its members instead of the manifest. Omit to list the manifest.',
+        'Exact .zip key from the manifest to list its members. If Zenodo refuses the listing (HTTP 403), archive_unavailable gives the archive download URL. Omit to list the manifest.',
       ),
     key_contains: z
       .preprocess(blankToUndefined, z.string().max(200).optional())
@@ -112,7 +112,7 @@ export const listFiles = tool('zenodo_list_files', {
             listable: z
               .boolean()
               .describe(
-                'True for a .zip, whose members zenodo_list_files lists when given this key as archive_key.',
+                'True for a .zip, eligible for a member listing with archive_key. Zenodo may refuse the listing.',
               ),
           })
           .describe('One file in the manifest.'),
@@ -208,7 +208,7 @@ export const listFiles = tool('zenodo_list_files', {
     {
       reason: 'archive_unavailable',
       code: JsonRpcErrorCode.ServiceUnavailable,
-      when: 'Zenodo cannot open the .zip named by archive_key: its member listing answered HTTP 500 after one retry, or no complete response arrived in time',
+      when: 'Zenodo cannot open the .zip named by archive_key: the listing answered HTTP 403 or HTTP 500 after one retry, or no complete response arrived in time',
       thrownBy: 'service',
       recovery:
         'Zenodo cannot list every .zip; download the archive from the URL in the error message (its download_url in the manifest) and list it locally, or read the record’s other files with zenodo_read_file.',

@@ -208,6 +208,31 @@ export function parseRecordRef(raw: string): RecordRef | ParseFailure {
   };
 }
 
+/** DOI Handbook §4.3.4 folds only ASCII letters. Other code points distinguish DOI names. */
+export function foldDoiCase(doi: string): string {
+  return doi.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+/**
+ * Exact indexed forms of a related DOI or HTTP(S) URL. DOI casing and wrappers
+ * vary across deposits, so keep the supplied value alongside canonical forms.
+ * URLs are parsed locally and never fetched.
+ */
+export function relatedIdentifierValues(raw: string): string[] | undefined {
+  const original = raw.trim();
+  let doi = original.replace(/^doi:\s*/i, '');
+  if (/^https?:\/\//i.test(original)) {
+    if (/\s|\\/.test(original)) return undefined;
+    const url = URL.parse(original);
+    if (!url || url.username || url.password) return undefined;
+    if (!DOI_HOSTS.has(url.hostname)) return [original];
+    doi = safeDecode(url.pathname.replace(/^\/+/, ''));
+  }
+  if (!DOI_PATTERN.test(doi)) return undefined;
+  const lower = foldDoiCase(doi);
+  return [...new Set([original, doi, `https://doi.org/${doi}`, lower, `https://doi.org/${lower}`])];
+}
+
 /** True when `raw` parses as a single DOI or URL record reference (not a bare number). */
 export function isWholeIdentifier(raw: string): boolean {
   const s = raw.trim();

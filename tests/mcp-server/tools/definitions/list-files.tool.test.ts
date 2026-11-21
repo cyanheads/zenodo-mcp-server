@@ -845,6 +845,68 @@ describe('zenodo_list_files — record errors', () => {
 });
 
 describe('zenodo_list_files — runToolContract (production output + enrichment parse)', () => {
+  it('exposes archive download recovery when a ZIP listing answers 403', async () => {
+    serveRecord('22917909', csvRecord);
+    const archive = '/records/22917909/files/Metadaten.zip';
+    fm.route({
+      match: onPath(`${archive}/container`, 'application/json'),
+      respond: () => textResponse('<html>Forbidden</html>', 403),
+    });
+    const result = await runToolContract(listFiles, {
+      id: '22917909',
+      archive_key: 'Metadaten.zip',
+    });
+    const url = `https://zenodo.org/api${archive}/content`;
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ServiceUnavailable,
+        message: expect.stringContaining(url),
+        data: {
+          status: 403,
+          reason: 'archive_unavailable',
+          recovery: { hint: recovery('archive_unavailable') },
+        },
+      },
+    });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining(url) });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining(recovery('archive_unavailable')),
+    });
+    expect(paths()).toEqual(['/api/records/22917909', `/api${archive}/container`]);
+  });
+
+  it('marks generic Fortran files as previewable in the manifest and archive', async () => {
+    const key = 'wur_model_library.F90';
+    const path = `examples/src/${key}`;
+    const archive = '/records/22705923/files/examples.zip';
+    const mimetype = 'application/octet-stream';
+    serveRecord('22705923', () =>
+      withEntries(recordFixture(), [
+        { key, size: 1311, mimetype },
+        { key: 'examples.zip', size: 1024, mimetype: 'application/zip' },
+      ]),
+    );
+    serveContainer(archive, { entries: [{ key: path, size: 30, mimetype }] });
+
+    const manifest = await runToolContract(listFiles, { id: '22705923', key_contains: key });
+    expect(manifest.structuredContent).toMatchObject({ entries: [{ key, previewable: true }] });
+    expect(manifest.content[0]).toMatchObject({
+      text: expect.stringContaining('previewable: true'),
+    });
+
+    const listing = await runToolContract(listFiles, {
+      id: '22705923',
+      archive_key: 'examples.zip',
+    });
+    expect(listing.structuredContent).toMatchObject({ members: [{ path, previewable: true }] });
+    expect(listing.content[0]).toMatchObject({
+      text: expect.stringContaining('previewable: true'),
+    });
+    expect(paths()).toEqual(['/api/records/22705923', `/api${archive}/container`]);
+  });
+
   it('passes the enrichment parse on a zero-entry restricted page', async () => {
     serveRecord('22837418', () => fixture('record-22837418-embargoed.json'));
     const result = await runToolContract(listFiles, { id: '22837418' });

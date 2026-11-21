@@ -548,6 +548,95 @@ describe('zenodo_read_file — shortcuts without a content request', () => {
 });
 
 describe('zenodo_read_file — ZIP members', () => {
+  it('exposes archive download recovery when a ZIP listing answers 403', async () => {
+    serveRecord('22705923', textRecord);
+    fm.route({
+      match: onPath(`${ZIP_PATH}/container`, 'application/json'),
+      respond: () => textResponse('<html>Forbidden</html>', 403),
+    });
+    const result = await runToolContract(readFile, {
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: 'scikit-learn-1.9.1/sklearn/__init__.py',
+    });
+    const url = `https://zenodo.org/api${ZIP_PATH}/content`;
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ServiceUnavailable,
+        message: expect.stringContaining(url),
+        data: {
+          status: 403,
+          reason: 'archive_unavailable',
+          recovery: { hint: recovery('archive_unavailable') },
+        },
+      },
+    });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining(url) });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining(recovery('archive_unavailable')),
+    });
+    expect(paths()).toEqual(['/api/records/22705923', `/api${ZIP_PATH}/container`]);
+  });
+
+  it('previews a nested generic Fortran member with a Fortran fence', async () => {
+    const member = 'archive/examples/hello.F90';
+    const source = 'program demo\nend program demo\n';
+    serveRecord('22705923', textRecord);
+    serveZip({ entries: [{ key: member, size: 30, mimetype: 'application/octet-stream' }] });
+    serveMember(member, () => bytesResponse(source));
+
+    const result = await runToolContract(readFile, {
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: member,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      archive_member: member,
+      status: 'text',
+      bytes_returned: 30,
+      text: source,
+    });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining(`\`\`\`fortran\n${source}\n\`\`\``),
+    });
+  });
+
+  it('keeps a member endpoint 403 restricted when the ZIP listing is available', async () => {
+    const member = 'scikit-learn-1.9.1/sklearn/__init__.py';
+    serveRecord('22705923', textRecord);
+    serveZip();
+    serveMember(member, () => textResponse('<html>Forbidden</html>', 403));
+
+    const result = await runToolContract(readFile, {
+      id: '22705923',
+      key: SKLEARN_ZIP,
+      archive_member: member,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      archive_member: member,
+      status: 'restricted',
+      files_access: 'public',
+      bytes_returned: 0,
+    });
+    expect(result.structuredContent).not.toHaveProperty('text');
+    expect(result.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: expect.stringContaining('HTTP 403') }),
+      ]),
+    );
+    expect(paths()).toEqual([
+      '/api/records/22705923',
+      `/api${ZIP_PATH}/container`,
+      `/api${ZIP_PATH}/container/${member}`,
+    ]);
+  });
+
   it('reads a member head without Range and reports has_more with no next_offset', async () => {
     serveRecord('22705923', textRecord);
     serveZip();
@@ -1111,6 +1200,28 @@ describe('zenodo_read_file — error contract', () => {
 });
 
 describe('zenodo_read_file — runToolContract (production output + enrichment parse)', () => {
+  it('returns not_text after reading a NUL in an allowlisted Fortran file', async () => {
+    const key = 'example.F90';
+    serveRecord('22705923', () =>
+      withEntries(recordFixture(), [
+        { key, size: BLOB.length, mimetype: 'application/octet-stream' },
+      ]),
+    );
+    serveRanged(`/records/22705923/files/${key}`, BLOB);
+    const result = await runToolContract(readFile, { id: '22705923', key });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ status: 'not_text', bytes_returned: 0 });
+    expect(result.structuredContent).not.toHaveProperty('text');
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining('**Status:** not_text'),
+    });
+    expect(paths()).toEqual([
+      '/api/records/22705923',
+      `/api/records/22705923/files/${key}/content`,
+    ]);
+  });
+
   it('passes the enrichment parse on a no-content (not_text) page', async () => {
     serveRecord('22705923', textRecord);
     const result = await runToolContract(readFile, { id: '22705923', key: 'model.bin' });

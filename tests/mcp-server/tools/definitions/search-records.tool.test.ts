@@ -115,6 +115,20 @@ function textOf(result: Awaited<ReturnType<typeof call>>['result']): string {
 }
 
 describe('zenodo_search_records — query, sort, and paging', () => {
+  it.each([
+    '/clim.*/',
+    'metadata.title:/clim.*/',
+    'climate "10.5281/zenodo.4321561"',
+    String.raw`climate 10.5281\/zenodo.4321561`,
+    'keyword:[a/b TO c/d]',
+  ])('preserves intentional regex or literal slash syntax in %s', async (query) => {
+    serveSearch(() => hitsBody([fixture<RawRecord>('record-22705923.json')], 1));
+    const result = await runToolContract(searchRecords, { query });
+    expect(result.isError).toBeFalsy();
+    expect(sentQ()).toBe(query);
+    expect(result.structuredContent).not.toHaveProperty('notice');
+  });
+
   it('sends a keyword query with the bestmatch default and normalizes the page', async () => {
     serveSearch(climatePage);
     const { result, enrichment } = await call({ query: 'climate', size: 2 });
@@ -1360,6 +1374,171 @@ describe('zenodo_search_records — zero hits and facets', () => {
   });
 });
 
+describe('zenodo_search_records — DOI discovery and deposit dates', () => {
+  const doiPair = '10.5281/zenodo.4321561 10.5281/zenodo.22705923';
+
+  it.each([
+    {
+      total: 30,
+      options: { resource_type: 'dataset', size: 50 },
+      q: `(${doiPair}) AND metadata.resource_type.props.type:"dataset"`,
+      guidance: 'size 50 is capped at 25 per call',
+    },
+    { total: 5, options: { page: 2 }, q: doiPair, guidance: 'Page 2 is past the last page (1)' },
+    { total: 0, options: { all_versions: true }, q: doiPair, guidance: 'No records matched.' },
+  ])(
+    'notices the mid-word regex and keeps other guidance (total $total)',
+    async ({ total, options, q, guidance }) => {
+      serveSearch(() =>
+        hitsBody(total === 30 ? [fixture<RawRecord>('record-22705923.json')] : [], total),
+      );
+      const result = await runToolContract(searchRecords, { query: doiPair, ...options });
+      expect(result.isError).toBeFalsy();
+      expect(sentQ()).toBe(q);
+      const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+      expect(result.structuredContent).toMatchObject({
+        notice: expect.stringContaining('/zenodo.4321561 10.5281/'),
+      });
+      expect(text).toContain('doi:"10.5281/zenodo.4321561" OR doi:"10.5281/zenodo.22705923"');
+      expect(text).toContain(guidance);
+    },
+  );
+
+  it('notices a mid-word regex in the balanced query sent with filters', async () => {
+    serveSearch();
+    const { enrichment } = await call({ query: `((${doiPair}`, deposited_from: '2020' });
+    expect(sentQ()).toBe(`(((${doiPair}))) AND created:[2020-01-01 TO *]`);
+    expect(enrichment.notice).toContain('/zenodo.4321561 10.5281/');
+    expect(enrichment.notice).toContain('Widen or drop deposited_from/deposited_to.');
+  });
+
+  it('describes an unparseable query as plain text even when a mid-word regex can be scanned', async () => {
+    serveSearch();
+    const query = `climate AND AND ${doiPair}`;
+    const { enrichment } = await call({ query, all_versions: true });
+    expect(sentQ()).toBe(query);
+    expect(enrichment.notice).toContain("matched the query's words as plain text");
+    expect(enrichment.notice).not.toContain('opened inside a word');
+  });
+
+  it('shows the exact grouped related DOI query and an empty-result notice on both surfaces', async () => {
+    serveSearch();
+    const result = await runToolContract(searchRecords, {
+      query: '((climate OR model) AND dataset)',
+      license: 'mit',
+      related_identifier: ' doi:10.1093/BIOINFORMATICS/BTAB843 ',
+      all_versions: true,
+    });
+    const expected =
+      '(((climate OR model) AND dataset)) AND metadata.rights.id:"mit" AND metadata.related_identifiers.identifier:("doi:10.1093/BIOINFORMATICS/BTAB843" OR "10.1093/BIOINFORMATICS/BTAB843" OR "https://doi.org/10.1093/BIOINFORMATICS/BTAB843" OR "10.1093/bioinformatics/btab843" OR "https://doi.org/10.1093/bioinformatics/btab843")';
+    expect(result.isError).toBeFalsy();
+    expect(sentQ()).toBe(expected);
+    expect(result.structuredContent).toMatchObject({
+      total: 0,
+      effectiveQuery: expected,
+      notice: expect.stringContaining('No records matched.'),
+    });
+    expect(result.content.map((b) => (b as { text: string }).text).join('\n')).toContain(expected);
+    expect(paths()).toEqual(['/api/records']);
+  });
+
+  it('sends an HTTP URL as one literal field value without visiting it', async () => {
+    serveSearch();
+    const related_identifier = 'https://example.org/Paper?q=A%2fB#Part';
+    await call({ related_identifier });
+    expect(sentQ()).toBe(
+      'metadata.related_identifiers.identifier:"https://example.org/Paper?q=A%2fB#Part"',
+    );
+    expect(paths()).toEqual(['/api/records']);
+  });
+
+  it('filters deposits independently of publication dates and carries sparse source timestamps unchanged', async () => {
+    const record = fixture<RawRecord>('record-22705923.json');
+    const created = '2020-12-14T19:07:48.437737+00:00';
+    const updated = '2020-12-17T11:56:28.223020+00:00';
+    serveSearch(() =>
+      hitsBody(
+        [
+          { ...record, created, updated },
+          { id: '4321561', metadata: { title: 'Without timestamps' } },
+        ],
+        2,
+      ),
+    );
+    const result = await runToolContract(searchRecords, {
+      published_from: '2018',
+      deposited_from: '2020-12-14',
+      deposited_to: '2020-12',
+    });
+    const q = 'metadata.publication_date:[2018-01-01 TO *] AND created:[2020-12-14 TO 2020-12-31]';
+    expect(result.isError).toBeFalsy();
+    expect(sentQ()).toBe(q);
+    expect(result.structuredContent).toMatchObject({
+      effectiveQuery: q,
+      hits: [{ created, updated }, { recid: '4321561' }],
+    });
+    expect(result.structuredContent).not.toHaveProperty('hits[1].created');
+    expect(result.structuredContent).not.toHaveProperty('hits[1].updated');
+    const text = result.content.map((b) => (b as { text: string }).text).join('\n');
+    expect(text).toContain(`**Created:** ${created}`);
+    expect(text).toContain(`**Updated:** ${updated}`);
+  });
+
+  it('rejects reversed deposit bounds before fetching and names the deposited inputs', async () => {
+    const result = await runToolContract(searchRecords, {
+      deposited_from: '2021',
+      deposited_to: '2020-12',
+    });
+    const message = 'deposited_from 2021-01-01 is after deposited_to 2020-12-31.';
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.ValidationError,
+        message,
+        data: { reason: 'invalid_date_range', recovery: { hint: recovery('invalid_date_range') } },
+      },
+    });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining(message) });
+    expect(result.content[0]).toMatchObject({
+      text: expect.stringContaining(recovery('invalid_date_range')),
+    });
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it('rejects an impossible deposit date at input validation', async () => {
+    const result = await runToolContract(searchRecords, { deposited_from: '2023-02-29' });
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.InvalidParams },
+    });
+    expect(fm.calls).toHaveLength(0);
+  });
+
+  it.each(['ftp://example.org/data', 'not a DOI or URL', 'https://user:pass@example.org/data'])(
+    'rejects an invalid related identifier without echoing it',
+    async (related_identifier) => {
+      const result = await runToolContract(searchRecords, { related_identifier });
+      const hint = recovery('invalid_related_identifier');
+      expect(result.structuredContent).toMatchObject({
+        error: {
+          code: JsonRpcErrorCode.ValidationError,
+          data: { reason: 'invalid_related_identifier', recovery: { hint } },
+        },
+      });
+      expect(result.content[0]).toMatchObject({ text: expect.stringContaining(hint) });
+      expect(JSON.stringify(result)).not.toContain(related_identifier);
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([{ deposited_to: '2020' }, { related_identifier: '10.1093/bioinformatics/btab843' }])(
+    'keeps the query_syntax guard for a composed %j even on its own',
+    async (filter) => {
+      const err = await failure({ query: 'climate AND AND dataset', ...filter });
+      expectReason(err, 'query_syntax', JsonRpcErrorCode.ValidationError);
+      expect(fm.calls).toHaveLength(0);
+    },
+  );
+});
+
 describe('zenodo_search_records — runToolContract (production output + enrichment parse)', () => {
   it('passes the enrichment parse on a zero-hit page', async () => {
     serveSearch();
@@ -1423,6 +1602,9 @@ describe('zenodo_search_records — runToolContract (production output + enrichm
       access_status: '',
       published_from: '',
       published_to: '',
+      deposited_from: '',
+      deposited_to: '',
+      related_identifier: '',
       sort: '',
     });
     expect(result.isError).toBeFalsy();
@@ -1455,6 +1637,28 @@ describe('zenodo_search_records — runToolContract (production output + enrichm
       error: { code: JsonRpcErrorCode.ServiceUnavailable, data: { reason: 'query_failed' } },
     });
     expect((result.content[0] as { text: string }).text).toContain(recovery('query_failed'));
+  });
+
+  it('returns a Zenodo 400 without exposing the captured response body', async () => {
+    const detail = 'upstream-only diagnostic';
+    fm.route({
+      match: onPath('/records'),
+      respond: () => jsonResponse({ detail }, { status: 400, bucket: 'search' }),
+    });
+    const result = await runToolContract(searchRecords, { query: 'climate' });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.InvalidParams,
+        data: { status: 400, operation: 'searchRecords' },
+      },
+    });
+    expect(result.structuredContent).not.toHaveProperty('error.data.body');
+    expect(result.structuredContent).not.toHaveProperty('error.data.responseBody');
+    expect(result.structuredContent).not.toHaveProperty('error.data.retryAfter');
+    expect(result.content[0]).toMatchObject({ type: 'text' });
+    expect(JSON.stringify(result.content)).not.toContain(detail);
+    expect(searchCalls()).toHaveLength(1);
   });
 });
 

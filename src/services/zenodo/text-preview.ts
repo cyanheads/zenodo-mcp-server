@@ -19,7 +19,7 @@ const PREVIEWABLE_MIMETYPES = new Set([
 ]);
 
 const PREVIEWABLE_EXTENSIONS = new Set(
-  'md markdown txt text csv tsv tab json jsonl ndjson geojson yaml yml xml cff bib ris rst tex py r rmd ipynb jl m sh sql toml ini cfg conf log html htm js ts c h cpp java go rs do sas'.split(
+  'md markdown txt text csv tsv tab json jsonl ndjson geojson yaml yml xml cff bib ris rst tex py r rmd ipynb jl m sh sql toml ini cfg conf log html htm js ts c h cpp java go rs do sas gff gff3 gtf fa fna sam aln nwk tre nex phy pdb cif mol2 f90 fasta faa ffn fastq fq newick nexus mmcif f f95 for'.split(
     ' ',
   ),
 );
@@ -125,6 +125,7 @@ const LANGUAGE_HINTS: ReadonlyMap<string, string> = new Map([
   ['c', 'c'],
   ['h', 'c'],
   ['cpp', 'cpp'],
+  ['f90', 'fortran'],
   ['java', 'java'],
   ['go', 'go'],
   ['rs', 'rust'],

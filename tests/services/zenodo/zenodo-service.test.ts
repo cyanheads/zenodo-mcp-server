@@ -65,6 +65,8 @@ describe('getRecord', () => {
         concept_doi: '10.5281/zenodo.591564',
         oai_id: 'oai:zenodo.org:22705923',
         title: 'scikit-learn',
+        dates: [],
+        locations: [],
         publication_date: '2026-09-11',
         version: '1.9.1',
         publisher: 'Zenodo',
@@ -343,6 +345,90 @@ describe('resolveDoi', () => {
     });
     const resolution = await service.resolveDoi('10.3897/AP.E134190', undefined, ctx());
     expect(resolution.status === 'found' && resolution.record.recid).toBe('15308258');
+  });
+
+  it('does not resolve or cache a phrase match for a partial DOI', async () => {
+    fm.route({
+      match: onPath('/records'),
+      respond: () => jsonResponse(searchFixture(), { bucket: 'search' }),
+    });
+    for (const doi of ['10.3897/ap', '10.3897/AP']) {
+      expect(await service.resolveDoi(doi, undefined, ctx())).toEqual({ status: 'not_on_zenodo' });
+    }
+    expect(fm.calls).toHaveLength(2);
+  });
+
+  it('keeps distinct non-ASCII DOIs separate before and after caching', async () => {
+    const body = {
+      hits: { hits: [{ id: '42', pids: { doi: { identifier: '10.1234/ÄBC' } } }], total: 1 },
+    };
+    fm.route({
+      match: onPath('/records'),
+      respond: () => jsonResponse(body, { bucket: 'search' }),
+    });
+    expect(await service.resolveDoi('10.1234/äbc', undefined, ctx())).toEqual({
+      status: 'not_on_zenodo',
+    });
+    expect(await service.resolveDoi('10.1234/Äbc', undefined, ctx())).toMatchObject({
+      status: 'found',
+      record: { recid: '42' },
+    });
+    expect(await service.resolveDoi('10.1234/äbc', undefined, ctx())).toEqual({
+      status: 'not_on_zenodo',
+    });
+    expect(fm.calls).toHaveLength(3);
+  });
+
+  it('finds the exact DOI outside the first page of analyzed hits', async () => {
+    fm.route({
+      match: onPath('/records'),
+      respond: (request) => {
+        const q = new URL(request.url).searchParams.get('q');
+        if (q === 'pids.doi.identifier.keyword:/10\\.3897\\/[aA][pP]\\.[eE]134190/') {
+          return jsonResponse(searchFixture(), { bucket: 'search' });
+        }
+        return jsonResponse(
+          { hits: { hits: [{ id: '1' }, { id: '2' }], total: 3 } },
+          { bucket: 'search' },
+        );
+      },
+    });
+    const resolved = await service.resolveDoi('10.3897/AP.E134190', undefined, ctx());
+    expect(resolved.status === 'found' && resolved.record.recid).toBe('15308258');
+    expect(fm.calls).toHaveLength(2);
+  });
+
+  it('checks later pages for identifiers too long for the keyword index', async () => {
+    const doi = `10.1234/${'abc'.repeat(90)}`;
+    fm.route({
+      match: onPath('/records'),
+      respond: (request) => {
+        const params = new URL(request.url).searchParams;
+        const size = Number(params.get('size'));
+        const hits =
+          params.get('page') === '2'
+            ? [{ id: '15308258', pids: { doi: { identifier: doi } } }]
+            : Array.from({ length: size }, (_, i) => ({ id: String(i + 1) }));
+        return jsonResponse({ hits: { hits, total: size + 1 } }, { bucket: 'search' });
+      },
+    });
+    const resolved = await service.resolveDoi(doi, undefined, ctx());
+    expect(resolved.status === 'found' && resolved.record.recid).toBe('15308258');
+    expect(fm.calls).toHaveLength(2);
+  });
+
+  it('shares the lookup time budget across ambiguous phrase hits and the exact lookup', async () => {
+    fm.route({
+      match: onPath('/records'),
+      respond: () => {
+        vi.setSystemTime(NOW.getTime() + 50_000);
+        return jsonResponse({ hits: { hits: [{ id: '1' }, { id: '2' }], total: 3 } });
+      },
+    });
+    await expect(service.resolveDoi('10.3897/ap', undefined, ctx())).rejects.toMatchObject({
+      data: { reason: 'record_unavailable' },
+    });
+    expect(fm.calls).toHaveLength(1);
   });
 
   it('retries the stripped form only after the as-given form misses', async () => {

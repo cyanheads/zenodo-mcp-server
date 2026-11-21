@@ -77,7 +77,7 @@ export const readFile = tool('zenodo_read_file', {
     archive_member: z
       .preprocess(blankToUndefined, z.string().max(1000).optional())
       .describe(
-        'Member path inside the .zip named by key (from zenodo_list_files with archive_key). Omit to read the file itself.',
+        'Member path inside the .zip named by key (from zenodo_list_files with archive_key). If Zenodo refuses the listing (HTTP 403), archive_unavailable gives the archive download URL. Omit to read the file itself.',
       ),
     offset_bytes: z
       .number()
@@ -218,7 +218,7 @@ export const readFile = tool('zenodo_read_file', {
     {
       reason: 'archive_unavailable',
       code: JsonRpcErrorCode.ServiceUnavailable,
-      when: 'Zenodo cannot open the .zip named by key: its member listing or the member read answered HTTP 500 after one retry, or no complete response arrived in time',
+      when: 'Zenodo cannot open the .zip named by key: the listing answered HTTP 403, or the listing or member read answered HTTP 500 after one retry or timed out',
       thrownBy: 'service',
       recovery:
         'Zenodo cannot open every .zip; download the archive from the URL in the error message and extract the member locally, or read the record’s top-level files with zenodo_read_file.',

@@ -17,7 +17,7 @@ import { inline, quoteBlock } from '../render.js';
 export const listVersions = tool('zenodo_list_versions', {
   title: 'List Zenodo record versions',
   description:
-    "List every version of a Zenodo deposit's version series, newest first, with each version's record id, DOI, version label, publication date, file totals, and usage counts. Accepts any identifier zenodo_get_record accepts; a concept DOI and any single version's DOI list the same series. Use it to find the version a paper cited or the current release. A miss (an unknown id, a deleted record with its removal tombstone, restricted metadata, or a DOI not registered on Zenodo) returns found: false with guidance instead of an error.",
+    "List every version of a Zenodo deposit's version series, newest first, with each version's record id, DOI, version label, publication date, record timestamps, file totals, and usage counts. Accepts any identifier zenodo_get_record accepts; a concept DOI and any single version's DOI list the same series. Use it to find the version a paper cited or the current release. A miss (an unknown id, a deleted record with its removal tombstone, restricted metadata, or a DOI not registered on Zenodo) returns found: false with guidance instead of an error.",
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   input: z.object({
     id: z
@@ -100,6 +100,18 @@ export const listVersions = tool('zenodo_list_versions', {
               .string()
               .optional()
               .describe('Publication date (EDTF as given); absent when not recorded.'),
+            created: z
+              .string()
+              .optional()
+              .describe(
+                'When Zenodo created this version record, ISO 8601 as given. Embargo release timing is separate. Absent when not reported.',
+              ),
+            updated: z
+              .string()
+              .optional()
+              .describe(
+                'When Zenodo last updated this version record, ISO 8601 as given. Absent when not reported.',
+              ),
             index: z
               .number()
               .optional()
@@ -306,6 +318,8 @@ export const listVersions = tool('zenodo_list_versions', {
         [
           v.doi ? `**DOI:** ${inline(v.doi)}` : undefined,
           v.publication_date ? `**Published:** ${inline(v.publication_date)}` : undefined,
+          v.created ? `**Created:** ${inline(v.created)}` : undefined,
+          v.updated ? `**Updated:** ${inline(v.updated)}` : undefined,
           v.index !== undefined ? `**Index:** ${v.index}` : undefined,
           v.is_latest !== undefined ? `**Latest:** ${v.is_latest}` : undefined,
         ]

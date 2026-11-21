@@ -147,6 +147,196 @@ const withoutCursor = (cuts: Cut[] | undefined) =>
   cuts?.map(({ cursor: _c, id: _i, ...cut }) => cut);
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 
+describe('zenodo_get_record — depositor dates and locations', () => {
+  const created = '2020-12-14T19:07:48.437737+00:00';
+  const updated = '2026-06-04T20:17:38.013579+00:00';
+  const point = { type: 'Point', coordinates: [126.6331, 37.3952] };
+  const geometry = {
+    type: 'GeometryCollection',
+    bbox: [1, 2, 126.6331, 37.3952],
+    source: { name: 'Survey', approved: true, notes: null },
+    geometries: [
+      point,
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [1, 2],
+            [3, 4],
+            [5, 6],
+            [1, 2],
+          ],
+        ],
+      },
+    ],
+  };
+
+  it.each([{}, { dates: [], locations: { features: [] } }])(
+    'keeps the sparse record shape for metadata %j',
+    async (metadata) => {
+      serveRecord('5', { id: '5', metadata: { title: 'Sparse', ...metadata } });
+      const result = await runToolContract(getRecord, { id: '5' });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({ found: true, record: { title: 'Sparse' } });
+      for (const field of [
+        'dates',
+        'date_count',
+        'locations',
+        'location_count',
+        'created',
+        'updated',
+      ]) {
+        expect(result.structuredContent).not.toHaveProperty(`record.${field}`);
+      }
+      expect(contentText(result)).not.toMatch(/### (Dates|Locations)|\*\*(Created|Updated):/);
+    },
+  );
+
+  it('returns verbatim timestamps and only populated date and location properties', async () => {
+    const raw = {
+      id: '5',
+      created,
+      updated,
+      metadata: {
+        title: 'Songdo collection',
+        publication_date: '2018-03-30',
+        dates: [
+          { date: '2022-10-04/2022-10-07', type: { id: 'collected' }, description: 'Field season' },
+          { date: '2021' },
+          {},
+        ],
+        locations: {
+          features: [
+            { place: 'Songdo, Incheon', description: 'Study site', geometry },
+            { place: 'Place only' },
+            { description: 'Description only' },
+            {},
+          ],
+        },
+      },
+    };
+    serveRecord('5', raw);
+    const result = await runToolContract(getRecord, { id: '5' });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      record: {
+        created,
+        updated,
+        publication_date: '2018-03-30',
+        date_count: 2,
+        location_count: 3,
+      },
+    });
+    expect(result.structuredContent).toHaveProperty('record.dates', [
+      { date: '2022-10-04/2022-10-07', type: 'collected', description: 'Field season' },
+      { date: '2021' },
+    ]);
+    expect(result.structuredContent).toHaveProperty('record.locations', [
+      { place: 'Songdo, Incheon', description: 'Study site', geometry },
+      { place: 'Place only' },
+      { description: 'Description only' },
+    ]);
+    const text = contentText(result);
+    for (const value of [
+      created,
+      updated,
+      '2018-03-30',
+      '2022-10-04/2022-10-07',
+      'collected',
+      'Field season',
+      'Songdo, Incheon',
+      'Study site',
+      'Place only',
+      'Description only',
+    ]) {
+      expect(text).toContain(value);
+    }
+    const fenced = /\x60\x60\x60json\n([\s\S]+?)\n\x60\x60\x60/.exec(text)?.[1];
+    expect(JSON.parse(fenced ?? '')).toEqual(geometry);
+  });
+
+  it.each(['dates', 'locations'] as const)(
+    'continues %s to the third page, reporting the same total and keeping every entry in order',
+    async (field) => {
+      const dates = Array.from({ length: 103 }, (_, index) => ({
+        date: `${1900 + index}`,
+        description: `Date entry ${index}`,
+      }));
+      const locations = Array.from({ length: 103 }, (_, index) => ({
+        place: `Site entry ${index}`,
+        geometry: { ...point, coordinates: [index, 20] },
+      }));
+      const expected = field === 'dates' ? dates : locations;
+      const countKey = field === 'dates' ? 'date_count' : 'location_count';
+      serveRecord('5', {
+        id: '5',
+        revision_id: 7,
+        metadata: { dates, locations: { features: locations } },
+      });
+      let result = await runToolContract(getRecord, { id: '5' });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toHaveProperty(`record.${countKey}`, 103);
+      expect(result.structuredContent).toHaveProperty(`record.${field}`, expected.slice(0, 50));
+      expect(contentText(result)).toContain(field === 'dates' ? 'Date entry 49' : 'Site entry 49');
+      for (const [offset, end] of [
+        [50, 100],
+        [100, 103],
+      ] as const) {
+        const continuation = structured(result).continuations?.find((item) => item.field === field);
+        expect(continuation).toMatchObject({ id: '5', unit: 'entries', shown: offset, total: 103 });
+        expect(contentText(result)).toContain(continuation?.cursor);
+        result = await runToolContract(getRecord, { id: '5', cursor: continuation?.cursor });
+        expect(result.isError).toBeFalsy();
+        expect(result.structuredContent).toMatchObject({
+          window: {
+            field,
+            offset,
+            shown: end - offset,
+            total: 103,
+            [field]: expected.slice(offset, end),
+          },
+        });
+        const text = contentText(result);
+        for (let index = offset; index < end; index++) {
+          expect(text).toContain(`${field === 'dates' ? 'Date' : 'Site'} entry ${index}`);
+        }
+        if (field === 'locations') {
+          const geometries = [...text.matchAll(/\x60\x60\x60json\n([\s\S]+?)\n\x60\x60\x60/g)].map(
+            ([, json]) => JSON.parse(json ?? ''),
+          );
+          expect(geometries).toEqual(locations.slice(offset, end).map((site) => site.geometry));
+        }
+      }
+      expect(result.structuredContent).not.toHaveProperty('continuations');
+
+      const cursor = encodeCursor({ offset: 103, limit: 50, recid: '5', rev: 7, field });
+      const pastEnd = await runToolContract(getRecord, { id: '5', cursor });
+      expect(pastEnd.structuredContent).toMatchObject({
+        error: {
+          code: JsonRpcErrorCode.ValidationError,
+          data: { reason: 'invalid_cursor', recovery: { hint: recovery('invalid_cursor') } },
+        },
+      });
+      expect(contentText(pastEnd)).toContain(`past the end of ${field}`);
+    },
+  );
+
+  it('returns both lists in full at exactly the metadata cap without issuing a cursor', async () => {
+    const dates = Array.from({ length: 50 }, (_, index) => ({ date: `${1900 + index}` }));
+    const locations = Array.from({ length: 50 }, (_, index) => ({ place: `Site ${index}` }));
+    serveRecord('5', { id: '5', metadata: { dates, locations: { features: locations } } });
+    const result = await runToolContract(getRecord, { id: '5' });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      truncated: false,
+      record: { dates, date_count: 50, locations, location_count: 50 },
+    });
+    expect(result.structuredContent).not.toHaveProperty('continuations');
+    expect(contentText(result)).toContain('### Dates (50)');
+    expect(contentText(result)).toContain('### Locations (50)');
+  });
+});
+
 /**
  * Follows one field's continuations from `first` to the field's end, returning each
  * window response. Each step takes the continuation for the same field and index,
@@ -184,6 +374,12 @@ function withoutNewFields(structured: Record<string, unknown>): Record<string, u
     keyword_count: _k,
     funding_count: _f,
     community_count: _m,
+    created: _created,
+    updated: _updated,
+    dates: _dates,
+    date_count: _dateCount,
+    locations: _locations,
+    location_count: _locationCount,
     ...legacy
   } = record;
   legacy.additional_descriptions = (
@@ -220,6 +416,10 @@ function legacyOutput(
     communities,
     versions,
     files,
+    created: _created,
+    updated: _updated,
+    dates: _dates,
+    locations: _locations,
     ...passThrough
   } = n;
   const entries = files.entries.slice(0, 25);
@@ -1432,7 +1632,7 @@ describe('zenodo_get_record — misses', () => {
     async (id, doi, searches) => {
       serveDoiSearch({ hits: { hits: [], total: 0 } });
       const { result, enrichment } = await call({ id });
-      const guidance = `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or search by title with zenodo_search_records to find a related deposit.`;
+      const guidance = `DOI ${doi} is not registered to a Zenodo record; check https://doi.org/${doi} to see whether it resolves outside Zenodo, or call zenodo_search_records with related_identifier set to this DOI and all_versions: true, or search by title with zenodo_search_records to find a related deposit.`;
       expect(result).toEqual({
         found: false,
         input_kind: 'external_doi',

@@ -129,6 +129,8 @@ export function normalizeRecord(raw: RawRecord): ZenodoRecord {
     ...opt('oai_id', raw.pids?.oai?.identifier),
     title: m.title ?? '',
     ...opt('publication_date', m.publication_date),
+    ...opt('created', raw.created),
+    ...opt('updated', raw.updated),
     ...opt('version', m.version),
     ...opt('publisher', m.publisher),
     ...(m.resource_type?.id
@@ -143,6 +145,20 @@ export function normalizeRecord(raw: RawRecord): ZenodoRecord {
       })),
     creators: (m.creators ?? []).map(normalizePerson),
     contributors: (m.contributors ?? []).map(normalizePerson),
+    dates: (m.dates ?? []).flatMap(({ date, description, type }) =>
+      date ? [{ date, ...opt('type', type?.id), ...opt('description', description) }] : [],
+    ),
+    locations: (m.locations?.features ?? []).flatMap(({ place, description, geometry }) =>
+      place || description || geometry
+        ? [
+            {
+              ...opt('place', place),
+              ...opt('description', description),
+              ...opt('geometry', geometry),
+            },
+          ]
+        : [],
+    ),
     keywords: (m.subjects ?? []).map((s) => s.subject).filter((s): s is string => !!s),
     rights: (m.rights ?? []).map((r) => ({
       ...opt('id', r.id),
@@ -234,6 +250,8 @@ export function normalizeSearchHit(raw: RawRecord): RecordSummary {
     ...opt('concept_doi', raw.parent?.pids?.doi?.identifier),
     title: m.title ?? '',
     ...opt('publication_date', m.publication_date),
+    ...opt('created', raw.created),
+    ...opt('updated', raw.updated),
     ...(m.resource_type?.id
       ? { resource_type: { id: m.resource_type.id, ...opt('title', i18n(m.resource_type.title)) } }
       : {}),
@@ -300,6 +318,8 @@ export function normalizeVersionHit(raw: RawRecord): VersionSummary {
     ...opt('version', m.version),
     title: m.title ?? '',
     ...opt('publication_date', m.publication_date),
+    ...opt('created', raw.created),
+    ...opt('updated', raw.updated),
     ...opt('index', raw.versions?.index),
     ...opt('is_latest', raw.versions?.is_latest),
     ...opt('file_count', raw.files?.count),

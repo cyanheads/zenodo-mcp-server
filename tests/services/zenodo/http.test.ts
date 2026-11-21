@@ -418,6 +418,20 @@ describe('retry matrix — HTTP 500', () => {
     downloadUrl: 'https://zenodo.org/api/records/22917909/files/Metadaten.zip/content',
   });
 
+  it('types an archive listing 403 as archive_unavailable without retrying', async () => {
+    fm.route({
+      match: onPath('/records/22917909/files/Metadaten.zip/container'),
+      respond: () => new Response('<html>Forbidden</html>', { status: 403 }),
+    });
+    const err = errorOf(await drive(http.request(archiveReq(), readStatus, ctx)));
+    expect(err.code).toBe(JsonRpcErrorCode.ServiceUnavailable);
+    expect(err.data).toMatchObject({ reason: 'archive_unavailable', status: 403 });
+    expect(err.message).toContain(
+      'download it from https://zenodo.org/api/records/22917909/files/Metadaten.zip/content',
+    );
+    expect(fm.calls).toHaveLength(1);
+  });
+
   it('retries an archive 500 once, then types it archive_unavailable naming the download URL', async () => {
     fm.route({
       match: onPath('/records/22917909/files/Metadaten.zip/container'),

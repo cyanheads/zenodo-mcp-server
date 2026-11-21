@@ -32,6 +32,8 @@ describe('previewMode', () => {
     ['.gitignore', 'application/octet-stream', 'sniff'],
     ['LICENSE', 'image/png', 'binary'],
     ['model.bin', 'application/octet-stream', 'binary'],
+    ['data.dat', 'application/octet-stream', 'binary'],
+    ['samples.bed', 'application/octet-stream', 'binary'],
     ['archive.tar.gz', 'application/octet-stream', 'binary'],
     ['data.parquet', undefined, 'binary'],
   ] as const)('%s (%s) → %s', (key, mime, mode) => {
@@ -80,6 +82,17 @@ describe('extensionOf', () => {
 });
 
 describe('isPreviewable', () => {
+  it.each(
+    'gff gff3 gtf fa fna sam aln nwk tre nex phy pdb cif mol2 f90 fasta faa ffn fastq fq newick nexus mmcif f f95 for'.split(
+      ' ',
+    ),
+  )('allows generic text files with the %s extension regardless of case', (extension) => {
+    expect(previewMode(`fixtures/sample.${extension}`, 'application/octet-stream')).toBe('text');
+    expect(
+      previewMode(`fixtures/sample.${extension.toUpperCase()}`, 'application/octet-stream'),
+    ).toBe('text');
+  });
+
   it.each([
     ['notes.bin', 'text/plain; charset=utf-8'],
     ['x', 'TEXT/CSV'],
@@ -128,6 +141,7 @@ describe('languageHint', () => {
     ['run.sh', 'bash'],
     ['refs.bib', 'bibtex'],
     ['table.csv', 'csv'],
+    ['source/wur_model_library.F90', 'fortran'],
     ['notes.txt', ''],
     ['README', ''],
     ['notes.constructor', ''],

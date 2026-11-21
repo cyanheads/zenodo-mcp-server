@@ -4,7 +4,7 @@ description: Find and inspect research artifacts with zenodo_* tools. Use when r
 license: Apache-2.0
 metadata:
   author: "cyanheads"
-  version: "1.0"
+  version: "1.1"
 ---
 
 ## Scope
@@ -26,7 +26,7 @@ Use Zenodo for deposited research datasets, archived software releases, and publ
 1. **Select the release before inspecting its files or producing its citation.** A concept resolves to the latest version. If the task concerns a paper's historical results, inspect the version history and retain the selected version's numeric record ID for subsequent calls. A concept alone does not establish which release the paper used; leave that unresolved when the citation supplies no deciding evidence.
 2. **Establish the funding identity before counting outputs.** Compare a funder's country and ROR identity with the requested organization. Scope award lookup to that funder and check the returned award details. Carry the full award filter value forward: a bare grant number searches by number without identifying its funder.
 3. **Check coverage before claiming completeness.** Discovery searches latest versions by default; decide whether the task counts deposits or releases. Follow returned pages for the relevant search or manifest and cursors for the relevant metadata field. When discovery's total exceeds its reachable set, narrow the search or report the coverage limit instead of calling the reachable set complete.
-4. **Distinguish unavailable inspection from absence.** Check file access and any active filename filter before concluding that a deposit lacks a file. An archive inspection failure means its contents remain uninspected; it does not establish that a member is absent.
+4. **Check file access before reporting a missing file.** Check the manifest’s filename filter. Zenodo can refuse to list a public ZIP with HTTP 403 while the ZIP remains downloadable. If either archive tool returns `archive_unavailable`, use the ZIP download URL in the error to inspect it locally, or report that its contents remain uninspected.
 5. **Bound conclusions to the content inspected.** Continue a top-level text file using its returned `next_offset`. When a preview is incomplete and no continuation is supplied, use the file's download link and disclose any content still uninspected. Do not describe a preview as a complete file review while `has_more` remains true.
 
 ## Core chain
@@ -35,11 +35,11 @@ Resolve the cited artifact or discover candidates → select the relevant versio
 
 ## Workflows
 
-**Recover a cited artifact.** Send a supplied DOI to `zenodo_get_record`; use title or topic discovery when the paper provides no usable identifier. Compare the resolved record with the citation and consult `zenodo_list_versions` when release selection needs evidence. Read the selected release's documentation, citation file, or data description before attributing its contents to the paper. Produce a citation for that selected release.
+**Recover a cited artifact.** Resolve the cited artifact DOI with `zenodo_get_record`. When you have the paper DOI, search with `related_identifier` and `all_versions: true`, then inspect each candidate’s relation type. A citation and a supplement can link to the same paper. Use title or topic discovery when the paper provides no usable identifier. Compare the resolved record with the citation and consult `zenodo_list_versions` when release selection needs evidence. Read the selected release's documentation, citation file, or data description before attributing its contents to the paper. Produce a citation for that selected release.
 
 **Audit a grant or community.** Resolve the named community or funder with `zenodo_lookup_vocabulary`; for a grant, resolve its award within the selected funder. Search using the returned filter identities. State the selected community or award, date scope, version policy, and any coverage limit with the resulting inventory. Describe the results as Zenodo deposits matching that scope, rather than all outputs a project has produced elsewhere.
 
-**Assess a candidate dataset or software archive.** Open a search candidate's full record and follow metadata continuations relevant to the decision. List its files; inspect an archive only when the needed documentation or sample is inside it. Read a README, license, schema, or sample as appropriate. Separate claims in the deposit's description from facts established by inspected content, and identify any relevant remainder you could not inspect.
+**Assess a candidate dataset or software archive.** Open the candidate record and follow its metadata continuations. For coverage, use the typed collection dates and location geometries when present. For deposit chronology, use `created` and `updated` and check the access and embargo metadata before inferring when files became public. List its files; inspect an archive only when the needed documentation or sample is inside it. Read a README, license, schema, or sample as appropriate. Separate claims in the deposit's description from facts established by inspected content, and identify any relevant remainder you could not inspect.
 
 ## References
 

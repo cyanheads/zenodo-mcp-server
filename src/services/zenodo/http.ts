@@ -1,6 +1,6 @@
 /**
  * @fileoverview The single fetch boundary to the Zenodo REST API. Per-call status
- * accept-lists (206/301/302/403/404/410/416 are outcomes here, not errors), the
+ * accept-lists (including status-specific outcomes such as 206 and 404), the
  * rate-limit header gate, two pacers (search and general buckets), and the retry
  * matrix. Only paths the service builds are fetched, against a constant base URL,
  * and redirects are followed only within zenodo.org.
@@ -66,7 +66,8 @@ export interface ZenodoRequest {
 export const JSON_ATTEMPT_MS = 45_000;
 export const CONTENT_ATTEMPT_MS = 20_000;
 
-const LADDER_DEADLINE_MS = 50_000;
+/** Total upstream time budget, shared by all searches in one DOI resolution. */
+export const LADDER_DEADLINE_MS = 50_000;
 const PACER_MAX_WAIT_MS = 20_000;
 /** A 504 slower than this is Zenodo's ~30 s gateway cutoff — deterministic, never retried. */
 const SLOW_GATEWAY_MS = 10_000;
@@ -219,13 +220,17 @@ export class ZenodoHttp {
     req: ZenodoRequest,
     read: (res: Response) => Promise<T>,
     ctx: Context,
+    deadlineAtMs?: number,
   ): Promise<T> {
+    ctx.signal.throwIfAborted();
+    const deadlineMs = deadlineAtMs === undefined ? LADDER_DEADLINE_MS : deadlineAtMs - Date.now();
+    if (deadlineMs <= 0) throw this.#timeoutError(req);
     try {
       return await withRetry((attempt) => this.#paced(req, read, attempt), {
         maxRetries: 1,
         baseDelayMs: 1_000,
         maxDelayMs: 15_000,
-        deadlineMs: LADDER_DEADLINE_MS,
+        deadlineMs,
         signal: ctx.signal,
         operation: req.operation,
         context: ctx,
@@ -371,6 +376,12 @@ export class ZenodoHttp {
 
   async #statusError(req: ZenodoRequest, res: Response, elapsedMs: number): Promise<McpError> {
     const status = res.status;
+    // Member reads accept 403 as a restricted result before reaching this classifier.
+    if (status === 403 && req.endpoint === 'archive') {
+      await discardBody(res);
+      return this.#archiveError(req, status);
+    }
+
     if (status === 429) {
       const reset = headerNumber(res.headers, 'x-ratelimit-reset');
       const retryAfter =
@@ -402,18 +413,18 @@ export class ZenodoHttp {
   }
 
   /**
-   * A ZIP Zenodo cannot open: its `/container` listing or member read answered 500
-   * (after the one retry) or never finished. The message names the archive's
-   * download URL, the path that still works.
+   * A ZIP Zenodo cannot open: the listing was refused, or an archive request
+   * answered 500 or timed out. The message names the archive download URL.
    */
-  #archiveError(req: ZenodoRequest, failure: 'status_500' | 'timeout', cause?: unknown): McpError {
-    const what = failure === 'status_500' ? 'HTTP 500' : 'no complete response in time';
+  #archiveError(req: ZenodoRequest, failure: 403 | 500 | 'timeout', cause?: unknown): McpError {
+    const what = failure === 'timeout' ? 'no complete response in time' : `HTTP ${failure}`;
     return new McpError(
       JsonRpcErrorCode.ServiceUnavailable,
       `Zenodo could not open this .zip archive (${what}); download it from ${req.downloadUrl ?? 'its download_url'} instead.`,
       {
         reason: 'archive_unavailable',
-        ...(failure === 'status_500' ? { status: 500 } : { retryable: false }),
+        ...(failure === 'timeout' ? {} : { status: failure }),
+        ...(failure === 500 ? {} : { retryable: false }),
       },
       cause === undefined ? undefined : { cause },
     );
@@ -441,7 +452,7 @@ export class ZenodoHttp {
           status: 500,
         });
       case 'archive':
-        return this.#archiveError(req, 'status_500');
+        return this.#archiveError(req, 500);
       default:
         return serviceUnavailable(`Zenodo answered HTTP 500 (${req.operation}).`, { status: 500 });
     }

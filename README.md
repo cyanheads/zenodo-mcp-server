@@ -48,10 +48,12 @@ The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a 
 
 ### `zenodo_search_records` <sub>tool</sub>
 
-- Keyword `query` (terms OR-ed unless joined with `AND`, quoted phrases, field syntax such as `metadata.title:"…"`) plus `resource_type`, `community`, `funder`, `award`, `creator_orcid`, `file_type`, `license`, `access_status`, and `published_from` / `published_to`
+- Keyword `query` (terms OR-ed unless joined with `AND`, quoted phrases, field syntax such as `metadata.title:"…"`) plus `resource_type`, `community`, `funder`, `award`, `creator_orcid`, `file_type`, `license`, `access_status`, `related_identifier`, publication dates (`published_from` / `published_to`), and deposit dates (`deposited_from` / `deposited_to`)
 - Up to 25 hits per page; only the first 10,000 matches are reachable (`result_window_exceeded` past that); latest versions only unless `all_versions` is true
 - `sort`: `bestmatch`, `newest`, `oldest`, `mostviewed`, `mostdownloaded`, `updated-desc`, `updated-asc` (default `bestmatch` with a query, `newest` without)
-- Each hit carries record and concept ids and DOIs, type, version, creators, license ids, access, file totals, and unique views and downloads; `facets` count resource types, access statuses, file types, subjects, and years over the full match set
+- `newest` and `oldest` order by the record creation timestamp. A deposit date range includes the entire final UTC day. The depositor sets the publication date independently.
+- Each hit carries `created` and `updated` when available, record and concept ids and DOIs, type, version, creators, license ids, access, file totals, and unique views and downloads; `facets` count resource types, access statuses, file types, subjects, and years over the full match set
+- To find deposits linked to a paper, pass its DOI as `related_identifier` with `all_versions: true`. A successful query containing a mid-word regex, such as two bare DOIs separated by a space, includes a notice showing how Zenodo read it.
 - A bare DOI or record URL as `query` fails as `query_is_identifier`; a `community` or `funder` Zenodo doesn't know fails as `unknown_community` / `unknown_funder`
 - Invalid search syntax fails as `query_syntax`, naming the offending token:
   - With a filter other than `community` or `all_versions` set, any invalid syntax fails (`climate AND AND model`, `metadata.title:` with no value, `'single quotes'`, an unclosed `[a TO b]`), because Zenodo would search it as plain text and drop the filters. Without such a filter it runs as plain text and the `notice` says so
@@ -63,7 +65,7 @@ The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a 
 ### `zenodo_get_record` <sub>tool</sub>
 
 - `id` takes a record id, a Zenodo DOI, a concept DOI or concept record id (resolves to the latest version), another DOI registered to a Zenodo record, or a zenodo.org / doi.org URL; `input_kind` and `resolved_from` report how it resolved
-- Returns the description as plain text (up to 4,000 characters), creators and contributors with ORCIDs and ROR affiliations, rights, access and embargo, funding, related identifiers, communities, version position with `latest_recid`, usage counts, and the first 25 files
+- Returns the description as plain text (up to 4,000 characters), creators and contributors with ORCIDs and ROR affiliations, rights, access and embargo, funding, related identifiers, typed dates, study locations with GeoJSON geometry, deposit timestamps, communities, version position with `latest_recid`, usage counts, and the first 25 files
 - Every capped field reports its total, and each cut except the file list (paged with `zenodo_list_files`) is listed in `continuations` with a `cursor` and the record `id` it is bound to; pass both back to get that field's next `window` (8,000 characters of text, or the next page of entries)
 - `citation_style`: `bibtex`, `csl-json`, `apa`, `chicago-author-date`, `harvard-cite-them-right`, `ieee`, `modern-language-association`, or `nature`
 - A miss returns `found: false` with `miss_kind` (`not_found`, `deleted`, `restricted`, `not_on_zenodo`) and `guidance`; a deleted record adds its removal `tombstone`
@@ -74,7 +76,7 @@ The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a 
 
 - Takes the same `id` forms as `zenodo_get_record`; a concept DOI and any version's DOI list the same series
 - Newest first, up to 25 per page; reports `total_versions`, `latest_recid`, and the concept record id and DOI
-- Each version carries its record id, DOI, version label, publication date, `index`, `is_latest`, file totals, and unique views and downloads
+- Each version carries its record id, DOI, version label, publication date, available `created` and `updated` timestamps, `index`, `is_latest`, file totals, and unique views and downloads
 - Misses return `found: false` with the same `miss_kind`, `guidance`, and `tombstone` as `zenodo_get_record`
 
 ---
@@ -82,6 +84,7 @@ The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a 
 ### `zenodo_list_files` <sub>tool</sub>
 
 - Manifest entries carry key, size, MIME type, MD5, download URL, `previewable`, and `listable` (a `.zip`); up to 200 per page via `offset` / `limit`
+- When Zenodo refuses to list a public ZIP with HTTP 403, both archive tools return `archive_unavailable` with the download URL.
 - `archive_key` lists the members of one `.zip`; Zenodo lists at most 1,000 files and directories per archive, flagged by `upstream_truncated`
 - `key_contains` filters keys or member paths case-insensitively before paging
 - Restricted and embargoed files return the access status and embargo date with no entries; unknown and deleted records fail as `record_not_found` / `record_deleted`
@@ -93,6 +96,7 @@ The published [zenodo-guide](./skills/zenodo-guide/SKILL.md) covers selecting a 
 - `key` from `zenodo_list_files`, plus `archive_member` to read inside a `.zip` without downloading it
 - `max_bytes` from 256 (default 16,384), at most 65,536 per call (larger values return 65,536); continue a top-level file from `next_offset`; `.zip` members read from byte 0 only
 - `status` is `text`, `not_text`, `restricted`, or `empty`; excerpts end on a line or character boundary
+- Recognized research text extensions include Fortran, Newick, FASTA, and GFF3 even when Zenodo labels the file `application/octet-stream`. A NUL byte in the read window yields `not_text`.
 - Extensionless files typed `application/octet-stream` (LICENSE, Makefile) are returned only when their content is UTF-8 text
 - Every result carries the deposit's `rights` and the `download_url`
 
@@ -180,7 +184,7 @@ The token authenticates as the account that created it, so reads can see what th
 
 ### Local development
 
-Requires [Bun v1.4.0](https://bun.sh/) or higher (or Node.js v24+).
+Requires [Bun v1.4.4](https://bun.sh/) or higher (or Node.js v24+).
 
 - **Clone and install**:
 

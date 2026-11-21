@@ -15,13 +15,20 @@ import {
   CONTENT_ATTEMPT_MS,
   discardBody,
   JSON_ATTEMPT_MS,
+  LADDER_DEADLINE_MS,
   readCapped,
   readJson,
   readText,
   ZenodoHttp,
   type ZenodoRequest,
 } from './http.js';
-import { downloadUrl, encodeKeySegments, type FunderRef, hasDotSegment } from './identifiers.js';
+import {
+  downloadUrl,
+  encodeKeySegments,
+  type FunderRef,
+  foldDoiCase,
+  hasDotSegment,
+} from './identifiers.js';
 import {
   normalizeAward,
   normalizeCommunity,
@@ -68,6 +75,22 @@ const JSON_ACCEPT = 'application/json';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
+
+/** InvenioRDM indexes at most 256 characters in the exact DOI keyword field. */
+const DOI_KEYWORD_LIMIT = 256;
+
+/** Lucene matches regexes against the entire keyword. Quote punctuation and fold ASCII DOI letters. */
+function exactDoiQuery(doi: string): string | undefined {
+  if (doi.length > DOI_KEYWORD_LIMIT || /[^\x21-\x7e]/u.test(doi)) return undefined;
+  let pattern = '';
+  for (const ch of doi.toLowerCase()) {
+    if (ch >= 'a' && ch <= 'z') pattern += `[${ch}${ch.toUpperCase()}]`;
+    else if (ch >= '0' && ch <= '9') pattern += ch;
+    else pattern += `\\${ch}`;
+  }
+  // OpenSearch's default index.max_regex_length is 1,000.
+  return pattern.length <= 1000 ? `pids.doi.identifier.keyword:/${pattern}/` : undefined;
+}
 
 const CITATION_ACCEPT: Record<CitationStyle, string> = {
   bibtex: 'application/x-bibtex',
@@ -194,31 +217,55 @@ export class ZenodoService {
     strippedDoi: string | undefined,
     ctx: Context,
   ): Promise<DoiResolution> {
+    const deadlineAtMs = Date.now() + LADDER_DEADLINE_MS;
     for (const candidate of strippedDoi ? [doi, strippedDoi] : [doi]) {
-      const cachedRecid = this.#cache.get<string>(`doi/${candidate.toLowerCase()}`);
+      const cacheKey = `doi/${foldDoiCase(candidate)}`;
+      const cachedRecid = this.#cache.get<string>(cacheKey);
       const cached = cachedRecid && this.#cache.get<ZenodoRecord>(`record/${cachedRecid}`);
       if (cached) return { status: 'found', record: cached };
 
-      const raw = await this.#http.request(
-        this.#jsonRequest('/records', RDM, 'search', 'doi_lookup', [200], 'resolveDoi', [
-          ['q', `doi:${quoteValue(candidate)}`],
-          ['all_versions', 'true'],
-          ['size', '2'],
-        ]),
-        (res) => readJson<RawSearchResponse>(res),
-        ctx,
-      );
-      const hits = raw.hits?.hits ?? [];
-      const wanted = candidate.toLowerCase();
-      const hit = hits.find((h) => h.pids?.doi?.identifier?.toLowerCase() === wanted) ?? hits[0];
+      const hit = await this.#findDoi(candidate, ctx, deadlineAtMs);
       if (hit) {
         const record = normalizeRecord(hit);
         this.#storeRecord(record, record.recid);
-        this.#cache.set(`doi/${candidate.toLowerCase()}`, record.recid, 5 * MINUTE);
+        this.#cache.set(cacheKey, record.recid, 5 * MINUTE);
         return { status: 'found', record };
       }
     }
     return { status: 'not_on_zenodo' };
+  }
+
+  async #findDoi(doi: string, ctx: Context, deadlineAtMs: number): Promise<RawRecord | undefined> {
+    const wanted = foldDoiCase(doi);
+    const phrase = `doi:${quoteValue(doi)}`;
+    let q = phrase;
+    let page = 1;
+    // Each hit includes its entire manifest. Keep ordinary lookups to a small page.
+    const size = 2;
+    while (true) {
+      const params: [string, string][] = [
+        ['q', q],
+        ['all_versions', 'true'],
+        ['size', String(size)],
+      ];
+      if (page > 1) params.push(['page', String(page)]);
+      const raw = await this.#http.request(
+        this.#jsonRequest('/records', RDM, 'search', 'doi_lookup', [200], 'resolveDoi', params),
+        (res) => readJson<RawSearchResponse>(res),
+        ctx,
+        deadlineAtMs,
+      );
+      const hits = raw.hits?.hits ?? [];
+      const hit = hits.find(
+        ({ pids }) => pids?.doi?.identifier && foldDoiCase(pids.doi.identifier) === wanted,
+      );
+      if (hit || q !== phrase || !hits.length || page * size >= (raw.hits?.total ?? 0)) return hit;
+      // A keyword lookup bypasses relevance ranking. Values the keyword field
+      // cannot index or case-fold must be checked on the remaining phrase pages.
+      const exact = page === 1 ? exactDoiQuery(doi) : undefined;
+      if (exact) q = exact;
+      else page++;
+    }
   }
 
   /**
@@ -315,8 +362,8 @@ export class ZenodoService {
   }
 
   /**
-   * Member listing of a ZIP file (`/container`). Call only for `.zip` keys — other
-   * archives answer 500, and so do some ZIPs, which surfaces as `archive_unavailable`.
+   * Member listing of a ZIP file (`/container`). A refused or unreadable listing
+   * surfaces as `archive_unavailable`, including HTTP 403 on public ZIPs.
    */
   async getContainer(recid: string, key: string, ctx: Context): Promise<ContainerLookup> {
     const cacheKey = `container/${recid}/${key}`;

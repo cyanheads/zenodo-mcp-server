@@ -93,6 +93,7 @@ export interface RawRecord {
     record?: string;
     status?: string;
   };
+  created?: string;
   custom_fields?: Record<string, unknown>;
   files?: RawFiles;
   id: string;
@@ -100,8 +101,10 @@ export interface RawRecord {
     additional_descriptions?: { description?: string; type?: RawVocabRef }[];
     contributors?: RawCreator[];
     creators?: RawCreator[];
+    dates?: { date?: string; description?: string; type?: RawVocabRef }[];
     description?: string;
     funding?: RawFunding[];
+    locations?: { features?: RecordLocation[] };
     publication_date?: string;
     publisher?: string;
     related_identifiers?: {
@@ -124,6 +127,7 @@ export interface RawRecord {
   pids?: { doi?: RawDoiPid; oai?: { identifier?: string } };
   revision_id?: number;
   stats?: { all_versions?: RawStatsBlock; this_version?: RawStatsBlock };
+  updated?: string;
   versions?: { index?: number; is_latest?: boolean };
 }
 
@@ -249,6 +253,23 @@ export interface UsageCounts {
   views?: number;
 }
 
+/** A depositor-supplied date or range, with its optional vocabulary id. */
+export interface RecordDate {
+  date: string;
+  description?: string;
+  type?: string;
+}
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type GeoJsonGeometry = { type: string; [key: string]: JsonValue };
+
+/** A depositor-supplied site, with the complete GeoJSON geometry when supplied. */
+export interface RecordLocation {
+  description?: string;
+  geometry?: GeoJsonGeometry;
+  place?: string;
+}
+
 /**
  * A fully normalized record: complete lists and the complete file manifest, with
  * descriptions converted to plain text. Tools apply their own display caps.
@@ -261,7 +282,9 @@ export interface ZenodoRecord {
   concept_doi?: string;
   concept_recid?: string;
   contributors: Person[];
+  created?: string;
   creators: Person[];
+  dates: RecordDate[];
   description?: string;
   doi?: string;
   doi_provider?: string;
@@ -273,6 +296,7 @@ export interface ZenodoRecord {
   };
   funding: FundingEntry[];
   keywords: string[];
+  locations: RecordLocation[];
   oai_id?: string;
   publication_date?: string;
   publisher?: string;
@@ -283,6 +307,7 @@ export interface ZenodoRecord {
   rights: { id?: string; title: string; url?: string }[];
   stats?: { all_versions: UsageCounts; this_version: UsageCounts };
   title: string;
+  updated?: string;
   version?: string;
   versions: { index?: number; is_latest?: boolean };
 }
@@ -308,6 +333,7 @@ export interface RecordSummary {
   communities: string[];
   concept_doi?: string;
   concept_recid?: string;
+  created?: string;
   creator_count: number;
   creators: { name: string; orcid?: string }[];
   description_snippet?: string;
@@ -322,6 +348,7 @@ export interface RecordSummary {
   resource_type?: { id: string; title?: string };
   title: string;
   total_bytes?: number;
+  updated?: string;
   version?: string;
   version_index?: number;
   views?: number;
@@ -350,6 +377,7 @@ export interface SearchPage {
 
 /** One version in a version series. */
 export interface VersionSummary {
+  created?: string;
   doi?: string;
   downloads?: number;
   file_count?: number;
@@ -359,6 +387,7 @@ export interface VersionSummary {
   recid: string;
   title: string;
   total_bytes?: number;
+  updated?: string;
   version?: string;
   views?: number;
 }
